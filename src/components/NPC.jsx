@@ -56,15 +56,29 @@ const DEFAULT_APPEARANCE = {
 }
 
 // ---------- Blob shadow (sombra de contato no chao) ----------
-// Disco plano e semi-transparente posicionado logo abaixo dos pes.
-// Muito mais barato que sombras de shadow map por NPC e visualmente correto.
-const blobGeo = new THREE.CircleGeometry(0.28, 16)
+// Disco plano em world space: NÃO fica dentro do grupo escalado do NPC,
+// pois a escala distorceria o raio e o offset Y. Em vez disso, um componente
+// BlobShadow acompanha a posicao world do grupo pai via useFrame.
+const blobGeo = new THREE.CircleGeometry(0.3, 16)
+blobGeo.rotateX(-Math.PI / 2) // pre-rotacionado: fica horizontal sem depender do parent
 const blobMat = new THREE.MeshBasicMaterial({
   color: '#000000',
   transparent: true,
-  opacity: 0.18,
-  depthWrite: false,    // nao escreve no depth buffer (evita artefatos)
+  opacity: 0.20,
+  depthWrite: false,
 })
+
+/** Segue a posicao XZ do grupo alvo em world space, sempre em Y=0.003. */
+function BlobShadow({ target }) {
+  const meshRef = useRef(null)
+  useFrame(() => {
+    if (!meshRef.current || !target.current) return
+    const wp = target.current.getWorldPosition(_blobWorldPos)
+    meshRef.current.position.set(wp.x, 0.003, wp.z)
+  })
+  return <mesh ref={meshRef} geometry={blobGeo} material={blobMat} renderOrder={1} />
+}
+const _blobWorldPos = new THREE.Vector3()
 
 // ---------- Geometrias compartilhadas ----------
 const GEO = {
@@ -569,19 +583,14 @@ function VisitorNPC({ id, appearance, outfit, scale, entrySide, leaving, spawn }
   useVisitorBrain(group, id, entrySide, leaving, motion, () => despawn(id))
 
   return (
-    <group ref={group} position={spawn} scale={scale}>
-      {/* Blob shadow: disco escuro no chao logo abaixo dos pes.
-          Rotacionado -90° em X para ficar horizontal (CircleGeometry e vertical por padrao).
-          Y = 0.002 para evitar Z-fighting com o piso. */}
-      <mesh
-        geometry={blobGeo}
-        material={blobMat}
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.002, 0]}
-        renderOrder={1}
-      />
-      <VisitorBody appearance={appearance} outfit={outfit} motion={motion} />
-    </group>
+    <>
+      {/* BlobShadow fora do grupo escalado: acompanha a posicao world do NPC
+          sem ser distorcida pela escala do corpo (scaleY diferente de 1). */}
+      <BlobShadow target={group} />
+      <group ref={group} position={spawn} scale={scale}>
+        <VisitorBody appearance={appearance} outfit={outfit} motion={motion} />
+      </group>
+    </>
   )
 }
 

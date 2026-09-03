@@ -19,7 +19,7 @@ import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { getArtworkTargets } from '../systems/artworkTargets'
 
-const MAX_DIST = 4.5   // metros: distancia maxima de interacao
+const MAX_DIST = 2.8   // metros: distancia maxima de interacao (mais proximo = mais intencional)
 const _raycaster = new THREE.Raycaster()
 const _center = new THREE.Vector2(0, 0)
 const RAYCAST_EVERY = 8  // faz raycast a cada N frames (nao precisa de 60/s)
