@@ -22,6 +22,7 @@ import { getArtworkTargets } from '../systems/artworkTargets'
 const MAX_DIST = 4.5   // metros: distancia maxima de interacao
 const _raycaster = new THREE.Raycaster()
 const _center = new THREE.Vector2(0, 0)
+const RAYCAST_EVERY = 8  // faz raycast a cada N frames (nao precisa de 60/s)
 
 export default function ArtworkFocus() {
   const { camera } = useThree()
@@ -31,24 +32,29 @@ export default function ArtworkFocus() {
   const openArtwork     = useGameStore((s) => s.openArtwork)
   const setFocused      = useGameStore((s) => s.setFocusedArtwork)
 
-  // Ref para evitar closure stale no event listener
   const focusedRef = useRef(null)
+  const frameCount = useRef(0)
 
   useFrame(() => {
+    frameCount.current++
+
     // So faz raycast quando o jogador esta com o mouse capturado e sem modal aberto
     if (!isPointerLocked || !isStarted || selectedArtwork) {
       if (focusedRef.current) { focusedRef.current = null; setFocused(null) }
       return
     }
 
+    // Throttle: raycast so a cada N frames
+    if (frameCount.current % RAYCAST_EVERY !== 0) return
+
     _raycaster.setFromCamera(_center, camera)
     _raycaster.far = MAX_DIST
 
     const meshes = [...getArtworkTargets().values()]
+    if (meshes.length === 0) return
     const hits = _raycaster.intersectObjects(meshes, false)
 
-    const hit = hits[0]
-    const artwork = hit?.object?.userData?.artwork ?? null
+    const artwork = hits[0]?.object?.userData?.artwork ?? null
 
     if (artwork !== focusedRef.current) {
       focusedRef.current = artwork

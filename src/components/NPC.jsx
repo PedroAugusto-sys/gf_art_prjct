@@ -273,12 +273,10 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
         let steerX = dirX
         let steerZ = dirZ
 
-        // --- Desvio tangencial de obstaculos ---
-        // A rota do grafo passa pelos corredores, mas o ultimo trecho ate a
-        // vaga da obra e livre; sem isso o visitante entra reto no canteiro.
-        const insideRoom = position.z < HALF_D - 0.5
-        if (insideRoom) {
-          for (const obs of NPC_OBSTACLES) {
+        // --- Desvio tangencial de obstaculos (so dentro da sala) ---
+        if (position.z < HALF_D - 0.5) {
+          for (let oi = 0; oi < NPC_OBSTACLES.length; oi++) {
+            const obs = NPC_OBSTACLES[oi]
             const ox = obs.x - position.x
             const oz = obs.z - position.z
             const along = ox * dirX + oz * dirZ
@@ -286,10 +284,11 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
 
             const clearance = obs.r + NPC_BODY_RADIUS
             const lateral = ox * -dirZ + oz * dirX
-            if (Math.abs(lateral) > clearance) continue
+            const absLat = lateral < 0 ? -lateral : lateral
+            if (absLat > clearance) continue
 
-            const push = (clearance - Math.abs(lateral)) / clearance
-            const side = Math.abs(lateral) < 0.05 ? state.avoidSide : lateral > 0 ? -1 : 1
+            const push = (clearance - absLat) / clearance
+            const side = absLat < 0.05 ? state.avoidSide : lateral > 0 ? -1 : 1
             steerX += -dirZ * side * push * AVOID_STRENGTH
             steerZ += dirX * side * push * AVOID_STRENGTH
           }
@@ -387,12 +386,15 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
     // ---------- Colisao rigida (somente dentro da sala) ----------
     const insideRoom = position.z < HALF_D - 0.5
     if (insideRoom) {
-      for (const obs of NPC_OBSTACLES) {
+      for (let oi = 0; oi < NPC_OBSTACLES.length; oi++) {
+        const obs = NPC_OBSTACLES[oi]
         const ox = position.x - obs.x
         const oz = position.z - obs.z
-        const dist = Math.hypot(ox, oz)
+        const dist2 = ox * ox + oz * oz
         const minDist = obs.r + NPC_BODY_RADIUS
-        if (dist < minDist && dist > 1e-5) {
+        const minDist2 = minDist * minDist
+        if (dist2 < minDist2 && dist2 > 1e-10) {
+          const dist = Math.sqrt(dist2)
           const push = (minDist - dist) / dist
           position.x += ox * push
           position.z += oz * push
@@ -484,13 +486,13 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
   return (
     <group>
       <group ref={torso}>
-        <mesh geometry={GEO.pelvis} material={mats.pants} position={[0, 0.95, 0]} castShadow />
-        <mesh geometry={GEO.torso} material={mats.shirt} position={[0, 1.26, 0]} castShadow />
+        <mesh geometry={GEO.pelvis} material={mats.pants} position={[0, 0.95, 0]} />
+        <mesh geometry={GEO.torso} material={mats.shirt} position={[0, 1.26, 0]} />
         {outfit === 'dress' && (
-          <mesh geometry={GEO.skirt} material={mats.outerwear} position={[0, 0.86, 0]} castShadow />
+          <mesh geometry={GEO.skirt} material={mats.outerwear} position={[0, 0.86, 0]} />
         )}
         {outfit === 'coat' && (
-          <mesh geometry={GEO.coat} material={mats.outerwear} position={[0, 1.06, 0]} castShadow />
+          <mesh geometry={GEO.coat} material={mats.outerwear} position={[0, 1.06, 0]} />
         )}
         <mesh geometry={GEO.joint} material={mats.shirt} position={[-0.19, 1.44, 0]} />
         <mesh geometry={GEO.joint} material={mats.shirt} position={[0.19, 1.44, 0]} />
@@ -500,14 +502,14 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
           <mesh geometry={GEO.hair} material={mats.hair} position={[0, 0.012, 0]} />
         </group>
         <group ref={leftArm} position={[-0.21, 1.43, 0]}>
-          <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} castShadow />
+          <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
           <group ref={leftElbow} position={[0, -0.25, 0]}>
             <mesh geometry={GEO.foreArm} material={mats.skin} position={[0, -0.12, 0]} />
             <mesh geometry={GEO.hand} material={mats.skin} position={[0, -0.25, 0]} />
           </group>
         </group>
         <group ref={rightArm} position={[0.21, 1.43, 0]}>
-          <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} castShadow />
+          <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
           <group ref={rightElbow} position={[0, -0.25, 0]}>
             <mesh geometry={GEO.foreArm} material={mats.skin} position={[0, -0.12, 0]} />
             <mesh geometry={GEO.hand} material={mats.skin} position={[0, -0.25, 0]} />
@@ -516,16 +518,16 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
       </group>
 
       <group ref={leftLeg} position={[-0.1, 0.9, 0]}>
-        <mesh geometry={GEO.thigh} material={mats.pants} position={[0, -0.22, 0]} castShadow />
+        <mesh geometry={GEO.thigh} material={mats.pants} position={[0, -0.22, 0]} />
         <group ref={leftKnee} position={[0, -0.45, 0]}>
-          <mesh geometry={GEO.shin} material={mats.pants} position={[0, -0.18, 0]} castShadow />
+          <mesh geometry={GEO.shin} material={mats.pants} position={[0, -0.18, 0]} />
           <mesh geometry={GEO.foot} material={mats.shoes} position={[0, -0.38, 0.06]} />
         </group>
       </group>
       <group ref={rightLeg} position={[0.1, 0.9, 0]}>
-        <mesh geometry={GEO.thigh} material={mats.pants} position={[0, -0.22, 0]} castShadow />
+        <mesh geometry={GEO.thigh} material={mats.pants} position={[0, -0.22, 0]} />
         <group ref={rightKnee} position={[0, -0.45, 0]}>
-          <mesh geometry={GEO.shin} material={mats.pants} position={[0, -0.18, 0]} castShadow />
+          <mesh geometry={GEO.shin} material={mats.pants} position={[0, -0.18, 0]} />
           <mesh geometry={GEO.foot} material={mats.shoes} position={[0, -0.38, 0.06]} />
         </group>
       </group>
@@ -556,7 +558,9 @@ function VisitorNPC({ id, appearance, outfit, scale, entrySide, leaving, spawn }
   useVisitorBrain(group, id, entrySide, leaving, motion, () => despawn(id))
 
   return (
-    <group ref={group} position={spawn} scale={scale}>
+    // castShadow no grupo: o Three.js propaga para todos os filhos,
+    // evitando registrar cada mesh separadamente no shadow map.
+    <group ref={group} position={spawn} scale={scale} castShadow>
       <VisitorBody appearance={appearance} outfit={outfit} motion={motion} />
     </group>
   )

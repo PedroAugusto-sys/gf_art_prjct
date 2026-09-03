@@ -87,11 +87,11 @@ function generateVisitor(id) {
 }
 
 // ---------- Configuracao ----------
-export const MAX_VISITORS = 8        // maximo dentro da galeria ao mesmo tempo
-export const SPAWN_INTERVAL_MIN = 5  // segundos entre cada entrada
-export const SPAWN_INTERVAL_MAX = 14
-export const LIFESPAN_MIN = 80       // quanto tempo um visitante fica na galeria
-export const LIFESPAN_MAX = 180
+export const MAX_VISITORS = 5        // maximo simultaneo (era 8, cada NPC = ~8 draw calls + logica)
+export const SPAWN_INTERVAL_MIN = 10 // segundos entre cada entrada
+export const SPAWN_INTERVAL_MAX = 18
+export const LIFESPAN_MIN = 60       // quanto tempo um visitante fica na galeria
+export const LIFESPAN_MAX = 120
 
 // ---------- Store Zustand (fora do Canvas, re-renderiza apenas a lista de NPCs) ----------
 let uidCounter = 1
@@ -109,7 +109,7 @@ export const useVisitorStore = create((set, get) => ({
     if (state._initialized) return
     // Pre-popula com alguns visitantes para a galeria nao aparecer vazia
     const initial = []
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 2; i++) {
       const v = generateVisitor(`v-${uidCounter++}`)
       initial.push({
         ...v,

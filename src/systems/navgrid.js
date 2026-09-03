@@ -1,231 +1,257 @@
 /**
- * navgrid.js — Grade de navegacao 2D gerada automaticamente a partir dos obstaculos.
+ * navgrid.js — Grade de navegacao 2D gerada a partir dos obstaculos.
  *
- * Por que substituir o grafo desenhado a mao?
- * Varios arcos cruzavam bancos e canteiros. O A* devolvia esses caminhos,
- * o push de colisao jogava o NPC para fora do obstaculo e o steering o
- * empurrava de volta — oscillacao que travava sempre nos mesmos pontos.
+ * Grade de CELL_SIZE metros, A* com min-heap binario (O(log n) por insercao/extracao),
+ * string pulling por visibilidade de segmento.
  *
- * Esta grade e construida UMA VEZ no carregamento:
- *   - Celulas de CELL_SIZE metros dentro de WALK_BOUNDS
- *   - Celula caminhavel quando seu centro livra todos os circulos de
- *     obstaculo.r + NPC_BODY_RADIUS (margem do corpo do visitante)
- *   - A*: 8 vizinhos, heuristica octil, sem corte de quina
- *     (a diagonal so e valida se os dois ortogonais adjacentes estiverem livres)
- *   - Suavizacao por string pulling: reduz o caminho em escada para
- *     segmentos retos enquanto a reta estiver livre de obstaculos
- *
- * API publica:
- *   findPath(x0, z0, x1, z1) -> Array<{x,z}>  ou  null se sem caminho
- *   nearestWalkable(x, z)    -> {x, z}
- *   isWalkable(x, z)         -> boolean
+ * A grade e construida UMA VEZ no carregamento; findPath aloca estruturas
+ * reutilizaveis para nao pressionar o GC.
  */
 
 import { NPC_OBSTACLES, WALK_BOUNDS } from '../data/museumLayout'
 
-// ---------- Parametros da grade ----------
-export const CELL_SIZE = 0.4
-const NPC_MARGIN = 0.28          // raio do corpo — mesma constante de NPC.jsx
-const SAMPLE_STEP = 0.2         // amostragem do string pulling
+// ---------- Parametros ----------
+const CELL_SIZE  = 0.5           // resolucao: 0.5m da menos celulas que 0.4m (grade 28% menor)
+const NPC_MARGIN = 0.30          // raio do corpo + folga
+const SAMPLE_STEP = 0.35         // passo do string pulling (era 0.2, muito fino)
 
-// ---------- Limites em indices ----------
+// ---------- Grade ----------
 const minX = WALK_BOUNDS.minX
 const minZ = WALK_BOUNDS.minZ
-const COLS = Math.ceil((WALK_BOUNDS.maxX - minX) / CELL_SIZE)
-const ROWS = Math.ceil((WALK_BOUNDS.maxZ - minZ) / CELL_SIZE)
+const COLS = Math.ceil((WALK_BOUNDS.maxX - minX) / CELL_SIZE) + 1
+const ROWS = Math.ceil((WALK_BOUNDS.maxZ - minZ) / CELL_SIZE) + 1
+const TOTAL = COLS * ROWS
 
-// ---------- Conversoes ----------
-function toIdx(col, row) { return row * COLS + col }
-function colOf(x) { return Math.floor((x - minX) / CELL_SIZE) }
-function rowOf(z) { return Math.floor((z - minZ) / CELL_SIZE) }
-function cellX(col) { return minX + col * CELL_SIZE + CELL_SIZE / 2 }
-function cellZ(row) { return minZ + row * CELL_SIZE + CELL_SIZE / 2 }
+function toIdx(c, r)  { return r * COLS + c }
+function colOf(x)     { return Math.max(0, Math.min(COLS - 1, Math.floor((x - minX) / CELL_SIZE))) }
+function rowOf(z)     { return Math.max(0, Math.min(ROWS - 1, Math.floor((z - minZ) / CELL_SIZE))) }
+function cellX(c)     { return minX + c * CELL_SIZE + CELL_SIZE * 0.5 }
+function cellZ(r)     { return minZ + r * CELL_SIZE + CELL_SIZE * 0.5 }
 
-// ---------- Mapa de caminhabilidade ----------
-function buildWalkable() {
-  const map = new Uint8Array(COLS * ROWS)   // 0 = bloqueado, 1 = livre
+// Uint8Array: 0 = bloqueado, 1 = livre
+const WALKABLE = new Uint8Array(TOTAL)
+;(function buildWalkable() {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const cx = cellX(c)
       const cz = cellZ(r)
       let free = true
-      for (const obs of NPC_OBSTACLES) {
-        if (Math.hypot(cx - obs.x, cz - obs.z) < obs.r + NPC_MARGIN) {
-          free = false
-          break
-        }
+      for (let o = 0; o < NPC_OBSTACLES.length; o++) {
+        const obs = NPC_OBSTACLES[o]
+        const dx = cx - obs.x, dz = cz - obs.z
+        if (dx * dx + dz * dz < (obs.r + NPC_MARGIN) ** 2) { free = false; break }
       }
-      map[toIdx(c, r)] = free ? 1 : 0
+      WALKABLE[toIdx(c, r)] = free ? 1 : 0
     }
   }
-  return map
-}
+})()
 
-const WALKABLE = buildWalkable()
-
-export function isWalkable(x, z) {
-  const c = colOf(x); const r = rowOf(z)
-  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return false
-  return WALKABLE[toIdx(c, r)] === 1
-}
-
-/** Celula livre mais proxima de (x, z). Busca em espiral ate raio 8. */
+// ---------- nearestWalkable ----------
 export function nearestWalkable(x, z) {
-  const bc = Math.max(0, Math.min(COLS - 1, colOf(x)))
-  const br = Math.max(0, Math.min(ROWS - 1, rowOf(z)))
+  const bc = colOf(x), br = rowOf(z)
   if (WALKABLE[toIdx(bc, br)]) return { x: cellX(bc), z: cellZ(br) }
-  for (let radius = 1; radius <= 8; radius++) {
-    for (let dc = -radius; dc <= radius; dc++) {
-      for (let dr = -radius; dr <= radius; dr++) {
-        if (Math.abs(dc) !== radius && Math.abs(dr) !== radius) continue
-        const c = bc + dc; const r = br + dr
+  for (let rad = 1; rad <= 10; rad++) {
+    for (let dc = -rad; dc <= rad; dc++) {
+      for (let dr = -rad; dr <= rad; dr++) {
+        if (Math.abs(dc) !== rad && Math.abs(dr) !== rad) continue
+        const c = bc + dc, r = br + dr
         if (c < 0 || c >= COLS || r < 0 || r >= ROWS) continue
         if (WALKABLE[toIdx(c, r)]) return { x: cellX(c), z: cellZ(r) }
       }
     }
   }
-  return { x, z } // fallback: posicao original
+  return { x, z }
 }
 
-// ---------- Heuristica octil ----------
-// Penalidade de diagonal = sqrt(2) ~ 1.414
+// ---------- Min-heap binario ----------
+// Armazena { key, f } — key = toIdx(c,r)
+function heapPush(heap, key, f) {
+  heap.push({ key, f })
+  let i = heap.length - 1
+  while (i > 0) {
+    const parent = (i - 1) >> 1
+    if (heap[parent].f <= heap[i].f) break
+    const tmp = heap[parent]; heap[parent] = heap[i]; heap[i] = tmp
+    i = parent
+  }
+}
+
+function heapPop(heap) {
+  const top = heap[0]
+  const last = heap.pop()
+  if (heap.length > 0) {
+    heap[0] = last
+    let i = 0
+    for (;;) {
+      const l = 2 * i + 1, r = 2 * i + 2
+      let s = i
+      if (l < heap.length && heap[l].f < heap[s].f) s = l
+      if (r < heap.length && heap[r].f < heap[s].f) s = r
+      if (s === i) break
+      const tmp = heap[s]; heap[s] = heap[i]; heap[i] = tmp
+      i = s
+    }
+  }
+  return top
+}
+
+// ---------- Buffers reutilizaveis (evita alocar Maps a cada findPath) ----------
+const gBuf    = new Float32Array(TOTAL)  // g-score; Infinity = nao visitado
+const fBuf    = new Float32Array(TOTAL)  // f-score
+const cameFrom = new Int32Array(TOTAL)   // indice do predecessor (-1 = nenhum)
+let   epoch   = 0                        // incrementado a cada findPath para "zerar" buffers
+const visitedEpoch = new Uint32Array(TOTAL) // guarda o epoch em que o no foi inicializado
+
+// 8 direcoes precomputadas: [dc, dr, custo]
 const D1 = 1, D2 = Math.SQRT2
-function heuristic(c0, r0, c1, r1) {
-  const dc = Math.abs(c1 - c0), dr = Math.abs(r1 - r0)
-  return D1 * (dc + dr) + (D2 - 2 * D1) * Math.min(dc, dr)
+const DIRS = [
+  1, 0, D1,   -1, 0, D1,   0, 1, D1,   0, -1, D1,
+  1, 1, D2,   1,-1, D2,   -1, 1, D2,   -1,-1, D2,
+]
+
+function h(c, r, gc, gr) {
+  const dc = Math.abs(gc - c), dr = Math.abs(gr - r)
+  return dc + dr + (D2 - 2) * Math.min(dc, dr)
 }
 
-// 8 direcoes: [dc, dr, custo]
-const DIRS = [
-  [1, 0, D1], [-1, 0, D1], [0, 1, D1], [0, -1, D1],
-  [1, 1, D2], [1, -1, D2], [-1, 1, D2], [-1, -1, D2],
-]
+function getG(idx) {
+  return visitedEpoch[idx] === epoch ? gBuf[idx] : Infinity
+}
+
+function initNode(idx, g, f, from) {
+  visitedEpoch[idx] = epoch
+  gBuf[idx] = g
+  fBuf[idx] = f
+  cameFrom[idx] = from
+}
 
 // ---------- A* ----------
 function astar(c0, r0, c1, r1) {
-  if (!WALKABLE[toIdx(c0, r0)] || !WALKABLE[toIdx(c1, r1)]) return null
+  epoch++
+  if (epoch > 0xFFFFFFFE) epoch = 1  // evita overflow (improvavel)
 
-  // Min-heap simples baseado em array ordenado (quantidade de nos e pequena)
-  const open = new Map()
-  const cameFrom = new Map()
-  const gScore = new Map()
+  const startIdx = toIdx(c0, r0)
+  const goalIdx  = toIdx(c1, r1)
 
-  const startKey = toIdx(c0, r0)
-  const goalKey = toIdx(c1, r1)
+  initNode(startIdx, 0, h(c0, r0, c1, r1), -1)
 
-  gScore.set(startKey, 0)
-  open.set(startKey, heuristic(c0, r0, c1, r1))
+  const heap = []
+  heapPush(heap, startIdx, h(c0, r0, c1, r1))
 
-  // Guarda col/row de cada chave para reconstrucao
-  const colRow = new Map([[startKey, [c0, r0]]])
+  while (heap.length > 0) {
+    const { key: curIdx } = heapPop(heap)
 
-  while (open.size > 0) {
-    // Extrai o no com menor f
-    let curKey = -1, bestF = Infinity
-    for (const [k, f] of open) { if (f < bestF) { bestF = f; curKey = k } }
-    open.delete(curKey)
-
-    if (curKey === goalKey) {
+    if (curIdx === goalIdx) {
       // Reconstroi o caminho
       const path = []
-      let k = goalKey
-      while (k !== startKey) {
-        const [c, r] = colRow.get(k)
+      let k = goalIdx
+      while (k !== startIdx) {
+        const c = k % COLS, r = (k / COLS) | 0
         path.push({ x: cellX(c), z: cellZ(r) })
-        k = cameFrom.get(k)
+        k = cameFrom[k]
       }
       path.reverse()
       return path
     }
 
-    const [cc, cr] = colRow.get(curKey)
-    const curG = gScore.get(curKey)
+    const curG = getG(curIdx)
+    const cc = curIdx % COLS
+    const cr = (curIdx / COLS) | 0
 
-    for (const [dc, dr, cost] of DIRS) {
+    for (let d = 0; d < 24; d += 3) {
+      const dc = DIRS[d], dr = DIRS[d + 1], cost = DIRS[d + 2]
       const nc = cc + dc, nr = cr + dr
       if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS) continue
-      if (!WALKABLE[toIdx(nc, nr)]) continue
+      const nIdx = toIdx(nc, nr)
+      if (!WALKABLE[nIdx]) continue
 
-      // Sem corte de quina: a diagonal so e valida se os dois ortogonais forem livres
+      // Sem corte de quina
       if (dc !== 0 && dr !== 0) {
         if (!WALKABLE[toIdx(cc + dc, cr)] || !WALKABLE[toIdx(cc, cr + dr)]) continue
       }
 
-      const nk = toIdx(nc, nr)
       const tentG = curG + cost
-      if (tentG < (gScore.get(nk) ?? Infinity)) {
-        gScore.set(nk, tentG)
-        cameFrom.set(nk, curKey)
-        colRow.set(nk, [nc, nr])
-        open.set(nk, tentG + heuristic(nc, nr, c1, r1))
+      if (tentG < getG(nIdx)) {
+        initNode(nIdx, tentG, tentG + h(nc, nr, c1, r1), curIdx)
+        heapPush(heap, nIdx, tentG + h(nc, nr, c1, r1))
       }
     }
   }
-  return null // sem caminho
+  return null
 }
 
 // ---------- String pulling ----------
-/** Verifica se o segmento (x0,z0)-(x1,z1) esta livre de obstaculos. */
 function segmentFree(x0, z0, x1, z1) {
   const dx = x1 - x0, dz = z1 - z0
   const len = Math.hypot(dx, dz)
   if (len < 1e-4) return true
+  const invLen = 1 / len
+  const udx = dx * invLen, udz = dz * invLen
   const steps = Math.ceil(len / SAMPLE_STEP)
   for (let i = 1; i <= steps; i++) {
-    const t = i / steps
-    const x = x0 + dx * t, z = z0 + dz * t
-    for (const obs of NPC_OBSTACLES) {
-      if (Math.hypot(x - obs.x, z - obs.z) < obs.r + NPC_MARGIN) return false
+    const t = (i / steps) * len
+    const x = x0 + udx * t, z = z0 + udz * t
+    for (let o = 0; o < NPC_OBSTACLES.length; o++) {
+      const obs = NPC_OBSTACLES[o]
+      const ex = x - obs.x, ez = z - obs.z
+      if (ex * ex + ez * ez < (obs.r + NPC_MARGIN) ** 2) return false
     }
   }
   return true
 }
 
-function smooth(points, startX, startZ) {
-  if (points.length <= 1) return points
+/**
+ * String pulling classico (Funnel simplificado por visibilidade):
+ * Percorre o caminho do fim para o inicio, pula pontos visiveis a partir
+ * do ultimo ancora confirmado.
+ */
+function smooth(points, sx, sz) {
+  const n = points.length
+  if (n === 0) return points
+
   const result = []
-  let ax = startX, az = startZ
-  let i = points.length - 1
-  while (i >= 0) {
-    if (i === 0 || !segmentFree(ax, az, points[i].x, points[i].z)) {
-      // Retrocede ate um ponto visivel
-      const prev = i + 1 < points.length ? i + 1 : i
-      result.push(points[prev])
-      ax = points[prev].x
-      az = points[prev].z
-      i = prev - 1
-    } else {
-      i--
+  let anchorX = sx, anchorZ = sz
+  let i = 0
+
+  while (i < n) {
+    // Encontra o ponto mais distante ainda visivel a partir da ancora
+    let last = i
+    for (let j = i; j < n; j++) {
+      if (segmentFree(anchorX, anchorZ, points[j].x, points[j].z)) {
+        last = j
+      } else {
+        break
+      }
     }
+    result.push(points[last])
+    anchorX = points[last].x
+    anchorZ = points[last].z
+    i = last + 1
   }
-  result.reverse()
   return result
 }
 
 // ---------- API publica ----------
-/**
- * Calcula o caminho de (x0,z0) ate (x1,z1).
- * Retorna array de pontos de mundo {x,z} ou null se sem caminho.
- */
 export function findPath(x0, z0, x1, z1) {
-  const c0 = Math.max(0, Math.min(COLS - 1, colOf(x0)))
-  const r0 = Math.max(0, Math.min(ROWS - 1, rowOf(z0)))
-  const c1 = Math.max(0, Math.min(COLS - 1, colOf(x1)))
-  const r1 = Math.max(0, Math.min(ROWS - 1, rowOf(z1)))
+  const c0 = colOf(x0), r0 = rowOf(z0)
+  const c1 = colOf(x1), r1 = rowOf(z1)
 
-  // Celula de origem bloqueada: parte da mais proxima livre
-  const startFree = WALKABLE[toIdx(c0, r0)]
-    ? { c: c0, r: r0 }
-    : (() => { const p = nearestWalkable(x0, z0); return { c: colOf(p.x), r: rowOf(p.z) } })()
+  // Se a celula de origem ou destino estiver bloqueada, usa a mais proxima livre
+  let sc = c0, sr = r0
+  if (!WALKABLE[toIdx(sc, sr)]) {
+    const p = nearestWalkable(x0, z0)
+    sc = colOf(p.x); sr = rowOf(p.z)
+  }
+  let gc = c1, gr = r1
+  if (!WALKABLE[toIdx(gc, gr)]) {
+    const p = nearestWalkable(x1, z1)
+    gc = colOf(p.x); gr = rowOf(p.z)
+  }
 
-  const goalFree = WALKABLE[toIdx(c1, r1)]
-    ? { c: c1, r: r1 }
-    : (() => { const p = nearestWalkable(x1, z1); return { c: colOf(p.x), r: rowOf(p.z) } })()
+  if (sc === gc && sr === gr) return [{ x: x1, z: z1 }]
 
-  const raw = astar(startFree.c, startFree.r, goalFree.c, goalFree.r)
-  if (!raw) return null
+  const raw = astar(sc, sr, gc, gr)
+  if (!raw || raw.length === 0) return null
 
-  // String pulling a partir da posicao real (nao da celula de origem)
-  const smoothed = smooth(raw, x0, z0)
-  return smoothed
+  return smooth(raw, x0, z0)
 }

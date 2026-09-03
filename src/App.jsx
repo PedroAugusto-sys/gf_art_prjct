@@ -30,11 +30,12 @@ export default function App() {
   return (
     <div className="fixed inset-0">
       <Canvas
-        shadows
+        shadows="soft"
         // Limita o pixel ratio: no mobile, DPR alto superaquece e derruba o FPS.
-        dpr={isMobile ? [1, 1.5] : [1, 2]}
-        camera={{ fov: 70, near: 0.1, far: 400, position: [0, 2.8, 12] }}
+        dpr={isMobile ? [1, 1.2] : [1, 1.5]}
+        camera={{ fov: 70, near: 0.15, far: 300, position: [0, 2.8, 12] }}
         gl={{ antialias: !isMobile, powerPreference: 'high-performance' }}
+        performance={{ min: 0.5 }}
       >
         {/* Ceu real: o jardim externo aparece pela fachada de vidro da parede sul */}
         <Sky sunPosition={[18, 26, 22]} turbidity={6} rayleigh={1.4} />
