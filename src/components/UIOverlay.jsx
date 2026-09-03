@@ -76,20 +76,25 @@ export default function UIOverlay() {
       </AnimatePresence>
 
       {/* ============ RETOMAR LOOK (ESC / unlock sem modal) ============ */}
+      {/* Botao compacto no centro-baixo da tela: nao escurece a cena,
+          facil de achar e clicar sem cobrir o que o usuario quer ver. */}
       <AnimatePresence>
         {showResume && (
           <motion.button
             key="resume"
             type="button"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.2 }}
             onClick={lockPointer}
-            className="pointer-events-auto absolute inset-0 flex items-center justify-center bg-black/35"
+            className="pointer-events-auto absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-black/70 px-7 py-3 text-sm font-medium text-white/95 shadow-lg backdrop-blur-sm hover:bg-black/85 active:scale-95 transition-transform"
           >
-            <span className="rounded-full bg-black/60 px-6 py-3 text-sm text-white/90 backdrop-blur-sm">
-              Clique para continuar
-            </span>
+            {/* Icone de cursor / clique */}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 shrink-0 opacity-80">
+              <path d="M13.5 4.5a1.5 1.5 0 1 1 3 0v8.25l1.72-1.72a.75.75 0 0 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 1.06-1.06l1.22 1.22V4.5ZM6 3.75A2.25 2.25 0 0 0 3.75 6v13.5A2.25 2.25 0 0 0 6 21.75h12A2.25 2.25 0 0 0 20.25 19.5V6A2.25 2.25 0 0 0 18 3.75H6Z" />
+            </svg>
+            Clique para continuar
           </motion.button>
         )}
       </AnimatePresence>
