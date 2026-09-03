@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { publishViewingArt } from './systems/multiplayer'
+import { DEFAULT_VERSION_ID, versionFromUrl, getVersionById } from './data/versions'
 
 /**
  * Detecta de forma simples se o dispositivo e mobile/touch.
@@ -183,6 +184,26 @@ export const useGameStore = create((set, get) => ({
     }),
   setMpStatus: ({ ready, offline }) =>
     set({ mpReady: !!ready, mpOffline: !!offline }),
+
+  // ---------- Versao / timeline ----------
+  selectedVersionId:
+    typeof window !== 'undefined' ? versionFromUrl().id : DEFAULT_VERSION_ID,
+  setSelectedVersion: (id) => {
+    const v = getVersionById(id)
+    if (!v || v.status !== 'playable') return
+    set({ selectedVersionId: v.id })
+    if (typeof window !== 'undefined') {
+      const next = `#r=${encodeURIComponent(v.roomCode)}`
+      if (window.location.hash !== next) {
+        window.history.replaceState(null, '', next)
+      }
+    }
+  },
+  /** Flags da versao ativa (ex.: legacyNpcs). */
+  getVersionFlags: () => {
+    const v = getVersionById(get().selectedVersionId)
+    return v?.flags || {}
+  },
 
   // ---------- Entrada transitoria (NAO assinar em componentes de UI) ----------
   // movement: vetor normalizado do joystick virtual (mobile). x = strafe, y = frente/tras.

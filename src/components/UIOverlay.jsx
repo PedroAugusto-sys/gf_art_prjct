@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGameStore } from '../store'
 import VirtualControls from './VirtualControls'
+import VersionTimeline from './VersionTimeline'
+import InviteQr from './InviteQr'
 import { generateAppearance, sanitizeNick } from '../systems/appearance'
 import { connectMultiplayer } from '../systems/multiplayer'
+import { getVersionById } from '../data/versions'
 
 /**
  * UIOverlay: interface HTML sobreposta ao Canvas.
@@ -19,12 +22,16 @@ export default function UIOverlay() {
   const lockPointer = useGameStore((s) => s.lockPointer)
   const setPlayerIdentity = useGameStore((s) => s.setPlayerIdentity)
   const setMpStatus = useGameStore((s) => s.setMpStatus)
+  const selectedVersionId = useGameStore((s) => s.selectedVersionId)
+  const setSelectedVersion = useGameStore((s) => s.setSelectedVersion)
 
   const wantsResume = isStarted && !isMobile && !selectedArtwork && !isPointerLocked
   const [showResume, setShowResume] = useState(false)
   const [nick, setNick] = useState('')
   const [nickError, setNickError] = useState('')
   const [joining, setJoining] = useState(false)
+
+  const activeVersion = getVersionById(selectedVersionId)
 
   useEffect(() => {
     if (!wantsResume) {
@@ -41,13 +48,21 @@ export default function UIOverlay() {
       setNickError('Digite um nick com 2 a 16 caracteres.')
       return
     }
+    const version = getVersionById(selectedVersionId)
+    if (!version || version.status !== 'playable') {
+      setNickError('Selecione uma versão disponível na linha do tempo.')
+      return
+    }
     setNickError('')
     setJoining(true)
 
     const { appearance, outfit, scale } = generateAppearance()
     setPlayerIdentity({ name, appearance, outfit, scale })
 
-    const result = await connectMultiplayer({ name, appearance, outfit, scale })
+    const result = await connectMultiplayer(
+      { name, appearance, outfit, scale },
+      version.roomCode
+    )
     setMpStatus({ ready: true, offline: result.offline })
     setJoining(false)
     beginPlaying()
@@ -71,16 +86,19 @@ export default function UIOverlay() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-center"
+            className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center overflow-y-auto bg-black/80 py-8 text-center"
           >
-            <h1 className="mb-3 text-4xl font-light tracking-wide text-white md:text-5xl">
+            <h1 className="mb-2 text-4xl font-light tracking-wide text-white md:text-5xl">
               Museu de Arte Virtual
             </h1>
-            <p className="mb-6 max-w-md px-6 text-sm text-white/70">
-              {isMobile
-                ? 'Use o joystick à esquerda para andar e arraste o lado direito para olhar. Aproxime-se de uma obra para interagir.'
-                : 'Use W A S D para andar e o mouse para olhar. Aponte para uma obra e pressione E. Outros visitantes online aparecem no museu.'}
+            <p className="mb-5 max-w-md px-6 text-sm text-white/70">
+              Escolha uma versão na linha do tempo (cada uma é uma sala online distinta),
+              digite seu nick e compartilhe o QR para convidar.
             </p>
+
+            <VersionTimeline selectedId={selectedVersionId} onSelect={setSelectedVersion} />
+
+            <InviteQr roomCode={activeVersion.roomCode} />
 
             <label className="mb-2 text-xs uppercase tracking-wide text-white/50">
               Seu nick
@@ -101,9 +119,9 @@ export default function UIOverlay() {
             <button
               onClick={handleEnter}
               disabled={joining}
-              className="mt-4 rounded-full border border-white/40 px-10 py-3 text-lg font-medium text-white transition hover:bg-white hover:text-black disabled:opacity-50"
+              className="mt-3 rounded-full border border-white/40 px-10 py-3 text-lg font-medium text-white transition hover:bg-white hover:text-black disabled:opacity-50"
             >
-              {joining ? 'Conectando…' : 'Entrar'}
+              {joining ? 'Conectando…' : `Entrar · ${activeVersion.title}`}
             </button>
           </motion.div>
         )}

@@ -35,6 +35,11 @@ import {
 import { updateNpcSnapshot, removeNpcSnapshot, buildNpcSnapshot } from '../systems/npcSnapshot'
 import VisitorModel, { BlobShadow } from './VisitorModel'
 import { DEFAULT_APPEARANCE } from '../systems/appearance'
+import { useGameStore } from '../store'
+
+function isLegacyNpcs() {
+  return !!useGameStore.getState().getVersionFlags()?.legacyNpcs
+}
 
 // ---------- Locomocao ----------
 const WALK_SPEED = 1.2
@@ -120,46 +125,65 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
   useEffect(() => () => removeAgent(npcId), [npcId])
 
   /**
-   * Monta a rota completa ate (targetX, targetZ) usando a grade de navegacao.
-   * Se o ponto de partida ou chegada estiver bloqueado, usa o mais proximo livre.
+   * Monta a rota ate (targetX, targetZ).
+   * Versao atual: A* na grade.
+   * Versao inicial (legacy): linha reta / poucos waypoints grosseiros (pode atravessar obstaculos).
    */
   const buildRoute = (position, targetX, targetZ) => {
     const outside = position.z > HALF_D - 0.5
     const route = []
+    const legacy = isLegacyNpcs()
 
-    // Fora do predio: alinha com a porta antes de entrar.
     if (outside) {
       const doorX = entrySide < 0 ? DOOR_LEFT_X : DOOR_RIGHT_X
       route.push({ x: doorX, z: HALF_D + 1.8 })
       route.push({ x: doorX, z: HALF_D - 1.0 })
     }
 
-    // A* na grade
+    if (legacy) {
+      // Pathing "bugado": vai direto (e às vezes um desvio aleatório que corta canteiros)
+      if (Math.random() < 0.45) {
+        route.push({
+          x: (position.x + targetX) / 2 + (Math.random() - 0.5) * 6,
+          z: (position.z + targetZ) / 2 + (Math.random() - 0.5) * 4,
+        })
+      }
+      route.push({ x: targetX, z: targetZ, final: true })
+      brain.current.route = route
+      return
+    }
+
     const sx = outside ? (entrySide < 0 ? DOOR_LEFT_X : DOOR_RIGHT_X) : position.x
     const sz = outside ? HALF_D - 1.0 : position.z
     const path = findPath(sx, sz, targetX, targetZ) || []
 
     for (const node of path) {
-      // Pula pontos desnecessariamente proximos do ponto de partida.
       if (Math.hypot(node.x - position.x, node.z - position.z) < ARRIVE_RADIUS * 0.8) continue
       route.push({ x: node.x, z: node.z })
     }
 
-    // O ultimo ponto e sempre o destino exato.
     route.push({ x: targetX, z: targetZ, final: true })
     brain.current.route = route
   }
 
   /** Rota de saida: ate a frente da porta e depois para fora do mapa. */
   const buildExitRoute = (position) => {
-    releaseSpot(npcId) // libera vaga imediatamente para outros NPCs
+    releaseSpot(npcId)
     const doorX = entrySide < 0 ? DOOR_LEFT_X : DOOR_RIGHT_X
-    const path = findPath(position.x, position.z, doorX, HALF_D - 1.0) || []
-    const route = path.map((p) => ({ x: p.x, z: p.z }))
-    // Ponto dentro do vao (sem colisao de parede)
-    route.push({ x: doorX, z: HALF_D - 0.3 })
-    // Ponto fora do predio — o exiting cuida do restante em linha reta
-    route.push({ x: doorX, z: HALF_D + 2.5, final: true })
+    const legacy = isLegacyNpcs()
+    const route = []
+
+    if (legacy) {
+      // Bug historico: vai ate perto da porta mas o clamp de Z impede sair
+      route.push({ x: doorX, z: HALF_D - 1.5 })
+      route.push({ x: doorX, z: HALF_D - 0.5, final: true })
+    } else {
+      const path = findPath(position.x, position.z, doorX, HALF_D - 1.0) || []
+      for (const p of path) route.push({ x: p.x, z: p.z })
+      route.push({ x: doorX, z: HALF_D - 0.3 })
+      route.push({ x: doorX, z: HALF_D + 2.5, final: true })
+    }
+
     brain.current.route = route
     brain.current.look = null
     brain.current.leavingAt = sim.time
@@ -254,8 +278,8 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
               (state.look
                 ? VIEW_MIN + Math.random() * (VIEW_MAX - VIEW_MIN)
                 : REST_MIN + Math.random() * (REST_MAX - REST_MIN))
-            // Agenda fala positiva ao observar obra
-            if (state.mode === 'viewing') {
+            // Agenda fala positiva ao observar obra (desligado na versao inicial)
+            if (state.mode === 'viewing' && !isLegacyNpcs()) {
               state.speechArmedAt =
                 time + SPEECH_DELAY_MIN + Math.random() * (SPEECH_DELAY_MAX - SPEECH_DELAY_MIN)
             }
@@ -340,8 +364,8 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
       chooseNextVisit(position, time)
     }
 
-    // ---------- Detector de travamento ----------
-    if (moving && time >= state.stuckCheckAt) {
+    // ---------- Detector de travamento (desligado no legado) ----------
+    if (!isLegacyNpcs() && moving && time >= state.stuckCheckAt) {
       const progress = Math.hypot(position.x - state.stuckX, position.z - state.stuckZ)
       if (progress < STUCK_MIN_PROGRESS) {
         state.stuckRetries++
@@ -398,13 +422,14 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
 
       position.x = Math.max(WALK_BOUNDS.minX, Math.min(WALK_BOUNDS.maxX, position.x))
 
-      // O clamp de Z so se aplica se o NPC NAO estiver saindo.
-      // NPCs em 'leaving'/'exiting' que estao no corredor da porta precisam
-      // ultrapassar HALF_D sem serem puxados de volta.
+      // Versao inicial: sempre clampa Z (recria a armadilha na porta).
+      // Versao atual: libera o corredor ao sair.
+      const legacy = isLegacyNpcs()
       const isSaindo = state.mode === 'leaving' || state.mode === 'exiting'
-      const nearDoor = Math.abs(position.x - DOOR_LEFT_X)  < DOOR_CORRIDOR_W ||
-                       Math.abs(position.x - DOOR_RIGHT_X) < DOOR_CORRIDOR_W
-      if (!(isSaindo && nearDoor)) {
+      const nearDoor =
+        Math.abs(position.x - DOOR_LEFT_X) < DOOR_CORRIDOR_W ||
+        Math.abs(position.x - DOOR_RIGHT_X) < DOOR_CORRIDOR_W
+      if (legacy || !(isSaindo && nearDoor)) {
         position.z = Math.max(WALK_BOUNDS.minZ, Math.min(WALK_BOUNDS.maxZ, position.z))
       }
     }
@@ -421,6 +446,7 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
 
     // ---------- Fala positiva (uma tentativa ao atingir o delay) ----------
     if (
+      !isLegacyNpcs() &&
       state.mode === 'viewing' &&
       state.speechArmedAt > 0 &&
       time >= state.speechArmedAt
@@ -505,8 +531,8 @@ function HostVisitorNPC({ id, name, appearance, outfit, scale, entrySide, leavin
           appearance={appearance || DEFAULT_APPEARANCE_FALLBACK}
           outfit={outfit}
           motion={motion}
-          name={name}
-          speech={bubble}
+          name={isLegacyNpcs() ? null : name}
+          speech={isLegacyNpcs() ? null : bubble}
         />
       </group>
     </>

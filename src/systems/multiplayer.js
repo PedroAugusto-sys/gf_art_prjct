@@ -1,5 +1,6 @@
 /**
  * Multiplayer via Playroom Kit (Netlify estático, sem backend próprio).
+ * Cada versão do museu usa um roomCode distinto.
  */
 
 import {
@@ -8,14 +9,15 @@ import {
   isHost as playroomIsHost,
   setState as roomSetState,
 } from 'playroomkit'
+import { DEFAULT_VERSION_ID, getVersionById } from '../data/versions'
 
-export const ROOM_CODE = 'gf-museu'
 export const MAX_PLAYERS = 10
 export const POSE_INTERVAL_MS = 100
 export const NPC_SNAPSHOT_MS = 180
 
 let connected = false
 let offline = false
+let activeRoomCode = null
 
 export function isMultiplayerConnected() {
   return connected && !offline
@@ -23,6 +25,10 @@ export function isMultiplayerConnected() {
 
 export function isMultiplayerOffline() {
   return offline
+}
+
+export function getActiveRoomCode() {
+  return activeRoomCode
 }
 
 export function isRoomHost() {
@@ -35,18 +41,30 @@ export function isRoomHost() {
 }
 
 /**
- * Conecta à sala única do museu. Em falha, marca offline.
+ * Conecta à sala da versao. Se o roomCode mudar, força nova conexao.
  * @param {{ name: string, appearance: object, outfit: string, scale: number[] }} identity
+ * @param {string} roomCode
  */
-export async function connectMultiplayer(identity) {
-  if (connected) {
+export async function connectMultiplayer(identity, roomCode) {
+  const code =
+    roomCode ||
+    getVersionById(DEFAULT_VERSION_ID).roomCode
+
+  // Mesma sala ja conectada: so republica identidade
+  if (connected && !offline && activeRoomCode === code) {
     publishIdentity(identity)
-    return { ok: true, offline: false }
+    return { ok: true, offline: false, roomCode: code }
   }
+
+  // Troca de sala: zera estado local (Playroom mantem a sessao anterior no SDK;
+  // insertCoin com outro roomCode cria/entra na sala pedida.)
+  connected = false
+  offline = false
+  activeRoomCode = null
 
   const opts = {
     skipLobby: true,
-    roomCode: ROOM_CODE,
+    roomCode: code,
     maxPlayersPerRoom: MAX_PLAYERS,
   }
   const gameId = import.meta.env.VITE_PLAYROOM_GAME_ID
@@ -56,13 +74,22 @@ export async function connectMultiplayer(identity) {
     await insertCoin(opts)
     connected = true
     offline = false
+    activeRoomCode = code
     publishIdentity(identity)
-    return { ok: true, offline: false }
+    // Espelha o convite na URL sem recarregar
+    if (typeof window !== 'undefined') {
+      const next = `#r=${encodeURIComponent(code)}`
+      if (window.location.hash !== next) {
+        window.history.replaceState(null, '', next)
+      }
+    }
+    return { ok: true, offline: false, roomCode: code }
   } catch (err) {
     console.warn('[multiplayer] Playroom indisponível, modo offline:', err)
     connected = false
     offline = true
-    return { ok: false, offline: true, error: err }
+    activeRoomCode = code
+    return { ok: false, offline: true, error: err, roomCode: code }
   }
 }
 
