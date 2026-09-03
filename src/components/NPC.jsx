@@ -55,6 +55,17 @@ const DEFAULT_APPEARANCE = {
   shoes: '#1f1f1f',
 }
 
+// ---------- Blob shadow (sombra de contato no chao) ----------
+// Disco plano e semi-transparente posicionado logo abaixo dos pes.
+// Muito mais barato que sombras de shadow map por NPC e visualmente correto.
+const blobGeo = new THREE.CircleGeometry(0.28, 16)
+const blobMat = new THREE.MeshBasicMaterial({
+  color: '#000000',
+  transparent: true,
+  opacity: 0.18,
+  depthWrite: false,    // nao escreve no depth buffer (evita artefatos)
+})
+
 // ---------- Geometrias compartilhadas ----------
 const GEO = {
   head: new THREE.SphereGeometry(0.115, 16, 12),
@@ -558,9 +569,17 @@ function VisitorNPC({ id, appearance, outfit, scale, entrySide, leaving, spawn }
   useVisitorBrain(group, id, entrySide, leaving, motion, () => despawn(id))
 
   return (
-    // castShadow no grupo: o Three.js propaga para todos os filhos,
-    // evitando registrar cada mesh separadamente no shadow map.
-    <group ref={group} position={spawn} scale={scale} castShadow>
+    <group ref={group} position={spawn} scale={scale}>
+      {/* Blob shadow: disco escuro no chao logo abaixo dos pes.
+          Rotacionado -90° em X para ficar horizontal (CircleGeometry e vertical por padrao).
+          Y = 0.002 para evitar Z-fighting com o piso. */}
+      <mesh
+        geometry={blobGeo}
+        material={blobMat}
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.002, 0]}
+        renderOrder={1}
+      />
       <VisitorBody appearance={appearance} outfit={outfit} motion={motion} />
     </group>
   )

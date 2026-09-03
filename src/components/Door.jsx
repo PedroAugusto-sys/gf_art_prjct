@@ -36,6 +36,10 @@ import { DOORS } from '../data/museumLayout'
 const LEAF_W = DOORS.width / 2   // largura de cada folha
 const LEAF_H = DOORS.height - 0.02
 const LEAF_T = 0.07
+// Deslocamento da folha para dentro da sala (eixo -Z).
+// Evita Z-fighting com a face interior da parede quando fechada.
+// Deve ser >= metade da espessura da folha (0.035) + pequena folga.
+const LEAF_INSET = LEAF_T / 2 + 0.04   // ~0.075 m para dentro
 
 // ---------- Comportamento ----------
 const TRIGGER_DIST = 5.5
@@ -86,6 +90,9 @@ function DoorLeaf({ pivotX, wallZ, openDir, centerX }) {
   const lastNear = useRef(-999)
 
   const half = LEAF_W / 2
+  // A folha fica LEAF_INSET metros para dentro da sala na posicao fechada.
+  // O pivo (dobradica) esta na face interior da parede.
+  const pivotZ = wallZ - LEAF_INSET
   const closedX = pivotX - openDir * half
 
   useFrame((_, delta) => {
@@ -98,8 +105,9 @@ function DoorLeaf({ pivotX, wallZ, openDir, centerX }) {
     angle.current += (target - angle.current) * Math.min(1, ANIM_SPEED * dt)
 
     const a = angle.current
+    // Rotacao em torno do pivo (na face interior da parede)
     const cx = pivotX - openDir * Math.cos(a) * half
-    const cz = wallZ + openDir * Math.sin(a) * half
+    const cz = pivotZ + openDir * Math.sin(a) * half
 
     if (meshRef.current) {
       meshRef.current.position.set(cx, LEAF_H / 2, cz)
@@ -120,7 +128,7 @@ function DoorLeaf({ pivotX, wallZ, openDir, centerX }) {
         ref={bodyRef}
         type="kinematicPosition"
         colliders={false}
-        position={[closedX, LEAF_H / 2, wallZ]}
+        position={[closedX, LEAF_H / 2, pivotZ]}
       >
         <CuboidCollider args={[LEAF_W / 2, LEAF_H / 2, LEAF_T / 2]} />
       </RigidBody>
@@ -129,8 +137,7 @@ function DoorLeaf({ pivotX, wallZ, openDir, centerX }) {
         ref={meshRef}
         geometry={leafGeo}
         material={glassMat}
-        position={[closedX, LEAF_H / 2, wallZ]}
-        castShadow
+        position={[closedX, LEAF_H / 2, pivotZ]}
       />
     </>
   )
@@ -143,21 +150,23 @@ function DoorLeaf({ pivotX, wallZ, openDir, centerX }) {
  */
 export default function DoubleDoor({ centerX, wallZ }) {
   const halfOpening = DOORS.width / 2
+  // O caixilho fica na face interior da parede (mesmo plano das folhas fechadas)
+  const frameZ = wallZ - LEAF_INSET
 
   return (
     <group>
       {/* Verga do caixilho */}
-      <mesh geometry={frameHGeo} material={frameMat} position={[centerX, LEAF_H + 0.05, wallZ]} />
+      <mesh geometry={frameHGeo} material={frameMat} position={[centerX, LEAF_H + 0.05, frameZ]} />
       {/* Montantes nas quinas do vao */}
       <mesh
         geometry={frameVGeo}
         material={frameMat}
-        position={[centerX - halfOpening - 0.04, LEAF_H / 2, wallZ]}
+        position={[centerX - halfOpening - 0.04, LEAF_H / 2, frameZ]}
       />
       <mesh
         geometry={frameVGeo}
         material={frameMat}
-        position={[centerX + halfOpening + 0.04, LEAF_H / 2, wallZ]}
+        position={[centerX + halfOpening + 0.04, LEAF_H / 2, frameZ]}
       />
 
       <DoorLeaf pivotX={centerX - halfOpening} wallZ={wallZ} openDir={-1} centerX={centerX} />
