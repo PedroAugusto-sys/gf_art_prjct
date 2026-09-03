@@ -8,10 +8,10 @@ export const VERSIONS = [
     id: 'v0',
     title: 'Inicial',
     dateLabel: 'Início',
-    blurb: 'Primeira versão: NPCs com pathing instável e menos polish.',
+    blurb: 'Protótipo: blockout sem paredes/pilares/árvores, NPCs instáveis e multiplayer.',
     roomCode: 'gf-museu-v0',
     status: 'playable', // playable | coming
-    flags: { legacyNpcs: true },
+    flags: { legacyNpcs: true, prototypeScene: true },
   },
   {
     id: 'v1',
@@ -20,7 +20,7 @@ export const VERSIONS = [
     blurb: 'Versão atual: navegação estável, falas, interação e multiplayer.',
     roomCode: 'gf-museu-v1',
     status: 'playable',
-    flags: { legacyNpcs: false },
+    flags: { legacyNpcs: false, prototypeScene: false },
   },
   {
     id: 'v2',

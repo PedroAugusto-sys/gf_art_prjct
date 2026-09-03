@@ -292,8 +292,8 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
         let steerX = dirX
         let steerZ = dirZ
 
-        // --- Desvio tangencial de obstaculos (so dentro da sala) ---
-        if (position.z < HALF_D - 0.5) {
+        // --- Colisao / desvio: desligado no prototipo (sem obstaculos visuais) ---
+        if (!isLegacyNpcs() && position.z < HALF_D - 0.5) {
           for (let oi = 0; oi < NPC_OBSTACLES.length; oi++) {
             const obs = NPC_OBSTACLES[oi]
             const ox = obs.x - position.x
@@ -402,9 +402,9 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
       position.z += sep.z * dt * 0.85
     }
 
-    // ---------- Colisao rigida (somente dentro da sala) ----------
+    // ---------- Colisao rigida (somente dentro da sala; desligada no prototipo) ----------
     const insideRoom = position.z < HALF_D - 0.5
-    if (insideRoom) {
+    if (insideRoom && !isLegacyNpcs()) {
       for (let oi = 0; oi < NPC_OBSTACLES.length; oi++) {
         const obs = NPC_OBSTACLES[oi]
         const ox = position.x - obs.x
