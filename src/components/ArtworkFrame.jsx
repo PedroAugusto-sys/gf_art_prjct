@@ -85,8 +85,9 @@ export default function ArtworkFrame({ artwork }) {
   }
   const handleClick = (e) => {
     e.stopPropagation()
+    // So abre se o clique veio de perto (distancia da camera ate a obra <= 2.8 m)
+    if (e.distance > 2.8) return
     document.body.style.cursor = 'auto'
-    // Libera o pointer lock no mesmo gesto do clique (antes do modal).
     useGameStore.getState().unlockPointer()
     openArtwork(artwork)
   }
