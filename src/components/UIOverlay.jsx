@@ -25,6 +25,8 @@ export default function UIOverlay() {
   const setMpStatus = useGameStore((s) => s.setMpStatus)
   const selectedVersionId = useGameStore((s) => s.selectedVersionId)
   const setSelectedVersion = useGameStore((s) => s.setSelectedVersion)
+  const playerName = useGameStore((s) => s.playerName)
+  const ensurePlayableVersion = useGameStore((s) => s.ensurePlayableVersion)
 
   const wantsResume = isStarted && !isMobile && !selectedArtwork && !isPointerLocked
   const [showResume, setShowResume] = useState(false)
@@ -32,7 +34,19 @@ export default function UIOverlay() {
   const [nickError, setNickError] = useState('')
   const [joining, setJoining] = useState(false)
 
-  const activeVersion = getVersionById(selectedVersionId)
+  const activeVersion =
+    getVersionById(selectedVersionId)?.status === 'playable'
+      ? getVersionById(selectedVersionId)
+      : getVersionById('v0')
+
+  useEffect(() => {
+    ensurePlayableVersion?.()
+  }, [ensurePlayableVersion])
+
+  // Ao voltar do ESC, reaproveita o nick anterior no campo
+  useEffect(() => {
+    if (!isStarted && playerName) setNick(playerName)
+  }, [isStarted, playerName])
 
   useEffect(() => {
     if (!wantsResume) {
@@ -62,6 +76,7 @@ export default function UIOverlay() {
   }, [isStarted, returnToVersionSelect])
 
   const handleEnter = async () => {
+    if (joining) return
     const name = sanitizeNick(nick)
     if (!name) {
       setNickError('Digite um nick com 2 a 16 caracteres.')
@@ -75,16 +90,31 @@ export default function UIOverlay() {
     setNickError('')
     setJoining(true)
 
-    const { appearance, outfit, scale } = generateAppearance()
-    setPlayerIdentity({ name, appearance, outfit, scale })
+    try {
+      const prev = useGameStore.getState()
+      const reused = prev.playerAppearance
+        ? {
+            appearance: prev.playerAppearance,
+            outfit: prev.playerOutfit || 'shirt',
+            scale: prev.playerScale || [1, 1, 1],
+          }
+        : generateAppearance()
+      const { appearance, outfit, scale } = reused
+      setPlayerIdentity({ name, appearance, outfit, scale })
 
-    const result = await connectMultiplayer(
-      { name, appearance, outfit, scale },
-      version.roomCode
-    )
-    setMpStatus({ ready: true, offline: result.offline })
-    setJoining(false)
-    beginPlaying()
+      const result = await connectMultiplayer(
+        { name, appearance, outfit, scale },
+        version.roomCode
+      )
+      setMpStatus({ ready: true, offline: !!result?.offline })
+      beginPlaying()
+    } catch (err) {
+      console.warn('[ui] falha ao entrar:', err)
+      setNickError('Não foi possível conectar. Tente de novo.')
+      setMpStatus({ ready: true, offline: true })
+    } finally {
+      setJoining(false)
+    }
   }
 
   return (

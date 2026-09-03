@@ -1,6 +1,10 @@
 /**
  * Multiplayer via Playroom Kit (Netlify estático, sem backend próprio).
  * Cada versão do museu usa um roomCode distinto.
+ *
+ * Importante: insertCoin() so pode ser chamado com sucesso uma vez por carga
+ * da pagina. Chamar de novo (ex.: apos ESC) trava a Promise — por isso
+ * mantemos a sessao e so republicamos identidade no re-entrar.
  */
 
 import {
@@ -15,8 +19,12 @@ export const MAX_PLAYERS = 10
 export const POSE_INTERVAL_MS = 100
 export const NPC_SNAPSHOT_MS = 180
 
+const INSERT_COIN_TIMEOUT_MS = 12000
+
 let connected = false
 let offline = false
+/** true apos o primeiro insertCoin (ok ou falha offline) nesta carga. */
+let sessionBooted = false
 let activeRoomCode = null
 
 export function isMultiplayerConnected() {
@@ -40,8 +48,24 @@ export function isRoomHost() {
   }
 }
 
+function withTimeout(promise, ms, label) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)
+    promise.then(
+      (v) => {
+        clearTimeout(t)
+        resolve(v)
+      },
+      (e) => {
+        clearTimeout(t)
+        reject(e)
+      }
+    )
+  })
+}
+
 /**
- * Conecta à sala da versao. Se o roomCode mudar, força nova conexao.
+ * Conecta à sala da versao. Se o roomCode mudar apos ja ter bootado, recarrega.
  * @param {{ name: string, appearance: object, outfit: string, scale: number[] }} identity
  * @param {string} roomCode
  */
@@ -50,17 +74,29 @@ export async function connectMultiplayer(identity, roomCode) {
     roomCode ||
     getVersionById(DEFAULT_VERSION_ID).roomCode
 
-  // Mesma sala ja conectada: so republica identidade
-  if (connected && !offline && activeRoomCode === code) {
+  // Sessao ja ativa na mesma sala (inclui retorno do menu ESC): so atualiza nick
+  if (sessionBooted && activeRoomCode === code && !offline) {
+    connected = true
     publishIdentity(identity)
     return { ok: true, offline: false, roomCode: code }
   }
 
-  // Troca de sala: zera estado local (Playroom mantem a sessao anterior no SDK;
-  // insertCoin com outro roomCode cria/entra na sala pedida.)
-  connected = false
-  offline = false
-  activeRoomCode = null
+  // Offline na mesma sala: reentra sem novo insertCoin
+  if (sessionBooted && activeRoomCode === code && offline) {
+    publishIdentity(identity)
+    return { ok: false, offline: true, roomCode: code }
+  }
+
+  // Troca de sala depois do primeiro boot: insertCoin de novo trava — recarrega
+  if (sessionBooted && activeRoomCode && activeRoomCode !== code) {
+    if (typeof window !== 'undefined') {
+      const next = `#r=${encodeURIComponent(code)}`
+      window.location.hash = next
+      window.location.reload()
+    }
+    // Pagina vai recarregar; nao desbloqueia o botao
+    return new Promise(() => {})
+  }
 
   const opts = {
     skipLobby: true,
@@ -71,12 +107,12 @@ export async function connectMultiplayer(identity, roomCode) {
   if (gameId) opts.gameId = gameId
 
   try {
-    await insertCoin(opts)
+    await withTimeout(insertCoin(opts), INSERT_COIN_TIMEOUT_MS, 'insertCoin')
+    sessionBooted = true
     connected = true
     offline = false
     activeRoomCode = code
     publishIdentity(identity)
-    // Espelha o convite na URL sem recarregar
     if (typeof window !== 'undefined') {
       const next = `#r=${encodeURIComponent(code)}`
       if (window.location.hash !== next) {
@@ -86,6 +122,7 @@ export async function connectMultiplayer(identity, roomCode) {
     return { ok: true, offline: false, roomCode: code }
   } catch (err) {
     console.warn('[multiplayer] Playroom indisponível, modo offline:', err)
+    sessionBooted = true
     connected = false
     offline = true
     activeRoomCode = code
@@ -94,7 +131,8 @@ export async function connectMultiplayer(identity, roomCode) {
 }
 
 export function publishIdentity(identity) {
-  if (!connected || offline) return
+  if (offline) return
+  if (!sessionBooted && !connected) return
   try {
     const me = myPlayer()
     me.setState('name', identity.name, true)
@@ -142,9 +180,10 @@ export function getLocalPlayer() {
   }
 }
 
-/** Volta ao menu: permite conectar de novo / trocar de sala. */
+/**
+ * Volta ao menu: NAO derruba a sessao Playroom.
+ * insertCoin nao pode ser chamado de novo sem reload.
+ */
 export function resetMultiplayerSession() {
-  connected = false
-  offline = false
-  activeRoomCode = null
+  // Mantem sessionBooted, activeRoomCode e flags de conexao.
 }
