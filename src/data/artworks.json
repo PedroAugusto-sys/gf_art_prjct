@@ -1,0 +1,74 @@
+{
+  "_instructions": {
+    "pt": "COMO ADICIONAR SUAS ARTES: 1) Copie a imagem para public/assets/artworks/ (ex.: minha-obra.jpg). 2) Adicione um objeto no array 'artworks' abaixo. 3) Em 'imagePath' use o caminho a partir da pasta public, comecando com barra: '/assets/artworks/minha-obra.jpg'. 4) 'position' e [x, y, z] em metros no mundo 3D (y ~ 2 fica na altura dos olhos). 5) 'rotation' e a rotacao em radianos no eixo Y para o quadro encostar na parede: parede norte=0, sul=3.14159, leste=-1.5708, oeste=1.5708. 6) 'size' e [largura, altura] da tela em metros (opcional; padrao 2x1.5).",
+    "wallReference": "Sala padrao: paredes em x=-14/x=14 e z=-19/z=19. Norte (z negativo) rotationY=0; Sul (z positivo) rotationY=3.14159; Leste (x positivo) rotationY=-1.5708; Oeste (x negativo) rotationY=1.5708."
+  },
+  "artworks": [
+    {
+      "id": "obra-01",
+      "imagePath": "/assets/artworks/obra-01.jpg",
+      "title": "A Noite Estrelada (exemplo)",
+      "artist": "Vincent van Gogh",
+      "year": "1889",
+      "description": "Substitua este texto pela historia da sua obra. Este e um item de exemplo: copie sua imagem para public/assets/artworks/obra-01.jpg para ve-la aqui.",
+      "position": [-6, 2.2, -18.7],
+      "rotation": [0, 0, 0],
+      "size": [3, 2.2]
+    },
+    {
+      "id": "obra-02",
+      "imagePath": "/assets/artworks/obra-02.jpg",
+      "title": "Retrato (exemplo)",
+      "artist": "Artista Desconhecido",
+      "year": "s/d",
+      "description": "Outra obra de exemplo na parede norte. Ajuste 'position' no eixo X para espacar os quadros.",
+      "position": [0, 2.2, -18.7],
+      "rotation": [0, 0, 0],
+      "size": [2, 2.6]
+    },
+    {
+      "id": "obra-03",
+      "imagePath": "/assets/artworks/obra-03.jpg",
+      "title": "Paisagem (exemplo)",
+      "artist": "Artista Desconhecido",
+      "year": "s/d",
+      "description": "Terceiro exemplo na parede norte.",
+      "position": [6, 2.2, -18.7],
+      "rotation": [0, 0, 0],
+      "size": [3, 2]
+    },
+    {
+      "id": "obra-04",
+      "imagePath": "/assets/artworks/obra-04.jpg",
+      "title": "Abstrato (exemplo)",
+      "artist": "Artista Desconhecido",
+      "year": "s/d",
+      "description": "Exemplo na parede leste (x positivo), virado para dentro da sala.",
+      "position": [13.7, 2.2, -6],
+      "rotation": [0, -1.5708, 0],
+      "size": [2.6, 2]
+    },
+    {
+      "id": "obra-05",
+      "imagePath": "/assets/artworks/obra-05.jpg",
+      "title": "Escultura em Tela (exemplo)",
+      "artist": "Artista Desconhecido",
+      "year": "s/d",
+      "description": "Exemplo na parede oeste (x negativo), virado para dentro da sala.",
+      "position": [-13.7, 2.2, -6],
+      "rotation": [0, 1.5708, 0],
+      "size": [2.6, 2]
+    },
+    {
+      "id": "obra-06",
+      "imagePath": "/assets/artworks/obra-06.jpg",
+      "title": "Contemporaneo (exemplo)",
+      "artist": "Artista Desconhecido",
+      "year": "s/d",
+      "description": "Exemplo na parede sul (z positivo), atras do ponto inicial do jogador.",
+      "position": [0, 2.2, 18.7],
+      "rotation": [0, 3.14159, 0],
+      "size": [3, 2]
+    }
+  ]
+}
