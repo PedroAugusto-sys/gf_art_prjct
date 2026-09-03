@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { publishViewingArt } from './systems/multiplayer'
 
 /**
  * Detecta de forma simples se o dispositivo e mobile/touch.
@@ -148,15 +149,15 @@ export const useGameStore = create((set, get) => ({
       /* ja destravado */
     }
     set({ selectedArtwork: artwork, isMovementPaused: true })
+    publishViewingArt(artwork?.id ?? null)
   },
 
   closeArtwork: () => {
     set({
       selectedArtwork: null,
-      // Ao fechar, so volta a andar se o jogo ja tiver comecado.
       isMovementPaused: !get().isStarted,
     })
-    // Mesmo clique do Fechar/backdrop e um gesto valido para relock.
+    publishViewingArt(null)
     if (get().isStarted && !get().isMobile) requestLock()
   },
 
@@ -165,6 +166,23 @@ export const useGameStore = create((set, get) => ({
     set({ isStarted: true, isMovementPaused: false })
     if (!get().isMobile) requestLock()
   },
+
+  // ---------- Multiplayer / identidade ----------
+  playerName: '',
+  playerAppearance: null,
+  playerOutfit: 'shirt',
+  playerScale: [1, 1, 1],
+  mpReady: false,
+  mpOffline: false,
+  setPlayerIdentity: ({ name, appearance, outfit, scale }) =>
+    set({
+      playerName: name,
+      playerAppearance: appearance,
+      playerOutfit: outfit,
+      playerScale: scale,
+    }),
+  setMpStatus: ({ ready, offline }) =>
+    set({ mpReady: !!ready, mpOffline: !!offline }),
 
   // ---------- Entrada transitoria (NAO assinar em componentes de UI) ----------
   // movement: vetor normalizado do joystick virtual (mobile). x = strafe, y = frente/tras.

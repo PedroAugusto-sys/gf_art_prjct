@@ -12,6 +12,7 @@ import DoubleDoor from './components/Door'
 import Parking from './components/Parking'
 import UIOverlay from './components/UIOverlay'
 import ArtworkFocus from './components/ArtworkFocus'
+import RemotePlayers from './components/RemotePlayers'
 import artworksData from './data/artworks.json'
 import { HALF_D } from './data/museumLayout'
 
@@ -23,65 +24,50 @@ useGLTF.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/'
 
 export default function App() {
   const isMobile = useGameStore((s) => s.isMobile)
+  const isStarted = useGameStore((s) => s.isStarted)
+  const mpReady = useGameStore((s) => s.mpReady)
+  const mpOffline = useGameStore((s) => s.mpOffline)
 
-  // Apenas as obras devidamente configuradas no JSON sao renderizadas.
   const artworks = artworksData.artworks || []
+  const showRemotes = isStarted && mpReady && !mpOffline
 
   return (
     <div className="fixed inset-0">
       <Canvas
         shadows="soft"
-        // Limita o pixel ratio: no mobile, DPR alto superaquece e derruba o FPS.
         dpr={isMobile ? [1, 1.2] : [1, 1.5]}
         camera={{ fov: 70, near: 0.15, far: 300, position: [0, 2.8, 12] }}
         gl={{ antialias: !isMobile, powerPreference: 'high-performance' }}
         performance={{ min: 0.5 }}
       >
-        {/* Ceu real: o jardim externo aparece pela fachada de vidro da parede sul */}
         <Sky sunPosition={[18, 26, 22]} turbidity={6} rayleigh={1.4} />
         <fog attach="fog" args={['#dbe4e2', 80, 220]} />
 
         <Suspense fallback={null}>
-          {/*
-            Primeiro na arvore: avanca o relogio da simulacao e cuida do
-            spawn/despawn. Precisa rodar antes dos NPCs e das portas para que
-            todos leiam o mesmo instante no mesmo frame.
-          */}
           <VisitorFlowTicker />
 
-          {/* Gravidade padrao da Terra. Rapier resolve colisoes com o mundo. */}
           <Physics gravity={[0, -9.81, 0]}>
             <Player position={[0, 2, 12]} />
             <MuseumEnvironment />
 
-            {/* Obras instanciadas dinamicamente a partir do artworks.json */}
             {artworks.map((art) => (
               <ArtworkFrame key={art.id} artwork={art} />
             ))}
 
-            {/* Portas duplas de vidro com fisica e animacao por proximidade */}
             <DoubleDoor centerX={-3.5} wallZ={HALF_D} />
-            <DoubleDoor centerX={3.5}  wallZ={HALF_D} />
+            <DoubleDoor centerX={3.5} wallZ={HALF_D} />
           </Physics>
 
-          {/* Estacionamento externo */}
           <Parking />
-
-          {/* Visitantes dinamicos: entram pelas portas, visitam obras, saem e somem */}
           <VisitorLayer />
-
-          {/* Raycast pela mira: detecta obra em foco e habilita tecla E */}
+          {showRemotes && <RemotePlayers />}
           <ArtworkFocus />
-
-          {/* Faz o preload dos assets ja carregados para evitar "pop-in" */}
           <Preload all />
         </Suspense>
 
-        {/* Reduz a resolucao dinamicamente sob carga para manter o FPS */}
         <AdaptiveDpr pixelated />
       </Canvas>
 
-      {/* UI HTML sobreposta (fora do Canvas): tela inicial, mira, modal e controles mobile */}
       <UIOverlay />
     </div>
   )

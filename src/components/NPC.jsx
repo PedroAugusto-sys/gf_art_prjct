@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import * as THREE from 'three'
+import { getState as roomGetState } from 'playroomkit'
 
 import {
   claimViewingSpot,
@@ -10,11 +10,31 @@ import {
   removeAgent,
   separationForce,
 } from '../systems/crowd'
-import { findPath, nearestWalkable } from '../systems/navgrid'
+import { findPath } from '../systems/navgrid'
 import { useVisitorStore } from '../systems/visitorFlow'
 import { npcPosMap } from '../systems/proximityRefs'
 import { sim, advanceSim } from '../systems/simClock'
 import { NPC_OBSTACLES, WALK_BOUNDS, HALF_D, DOORS } from '../data/museumLayout'
+import {
+  pickPositiveLine,
+  canStartSpeech,
+  markSpeechStarted,
+  SPEECH_DURATION,
+  SPEECH_COOLDOWN,
+  SPEECH_CHANCE,
+  SPEECH_DELAY_MIN,
+  SPEECH_DELAY_MAX,
+} from '../systems/npcDialogue'
+import {
+  isRoomHost,
+  isMultiplayerOffline,
+  isMultiplayerConnected,
+  publishNpcs,
+  NPC_SNAPSHOT_MS,
+} from '../systems/multiplayer'
+import { updateNpcSnapshot, removeNpcSnapshot, buildNpcSnapshot } from '../systems/npcSnapshot'
+import VisitorModel, { BlobShadow } from './VisitorModel'
+import { DEFAULT_APPEARANCE } from '../systems/appearance'
 
 // ---------- Locomocao ----------
 const WALK_SPEED = 1.2
@@ -47,66 +67,9 @@ const VIEW_MAX = 15
 const REST_MIN = 3
 const REST_MAX = 7
 
-const DEFAULT_APPEARANCE = {
-  skin: '#c4a484',
-  hair: '#2c1b10',
-  shirt: '#6b7280',
-  pants: '#3f3f46',
-  shoes: '#1f1f1f',
-}
+const DEFAULT_APPEARANCE_FALLBACK = DEFAULT_APPEARANCE
 
-// ---------- Blob shadow (sombra de contato no chao) ----------
-// Disco plano em world space: NÃO fica dentro do grupo escalado do NPC,
-// pois a escala distorceria o raio e o offset Y. Em vez disso, um componente
-// BlobShadow acompanha a posicao world do grupo pai via useFrame.
-const blobGeo = new THREE.CircleGeometry(0.3, 16)
-blobGeo.rotateX(-Math.PI / 2) // pre-rotacionado: fica horizontal sem depender do parent
-const blobMat = new THREE.MeshBasicMaterial({
-  color: '#000000',
-  transparent: true,
-  opacity: 0.20,
-  depthWrite: false,
-})
-
-/** Segue a posicao XZ do grupo alvo em world space, sempre em Y=0.003. */
-function BlobShadow({ target }) {
-  const meshRef = useRef(null)
-  useFrame(() => {
-    if (!meshRef.current || !target.current) return
-    const wp = target.current.getWorldPosition(_blobWorldPos)
-    meshRef.current.position.set(wp.x, 0.003, wp.z)
-  })
-  return <mesh ref={meshRef} geometry={blobGeo} material={blobMat} renderOrder={1} />
-}
-const _blobWorldPos = new THREE.Vector3()
-
-// ---------- Geometrias compartilhadas ----------
-const GEO = {
-  head: new THREE.SphereGeometry(0.115, 16, 12),
-  hair: new THREE.SphereGeometry(0.121, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.62),
-  neck: new THREE.CylinderGeometry(0.05, 0.055, 0.09, 8),
-  torso: new THREE.CapsuleGeometry(0.16, 0.2, 6, 14),
-  pelvis: new THREE.CapsuleGeometry(0.15, 0.07, 6, 14),
-  joint: new THREE.SphereGeometry(0.068, 10, 8),
-  upperArm: new THREE.CapsuleGeometry(0.05, 0.15, 5, 10),
-  foreArm: new THREE.CapsuleGeometry(0.044, 0.15, 5, 10),
-  hand: new THREE.SphereGeometry(0.05, 8, 8),
-  thigh: new THREE.CapsuleGeometry(0.078, 0.19, 5, 10),
-  shin: new THREE.CapsuleGeometry(0.066, 0.21, 5, 10),
-  foot: new THREE.BoxGeometry(0.11, 0.07, 0.25),
-  skirt: new THREE.CylinderGeometry(0.17, 0.3, 0.36, 14, 1, true),
-  coat: new THREE.CylinderGeometry(0.2, 0.24, 0.42, 12, 1, true),
-}
-
-// ---------- Cache de materiais ----------
-const materialCache = new Map()
-function sharedMaterial(color, roughness = 0.8, side = THREE.FrontSide) {
-  const key = `${color}|${roughness}|${side}`
-  if (!materialCache.has(key)) {
-    materialCache.set(key, new THREE.MeshStandardMaterial({ color, roughness, side }))
-  }
-  return materialCache.get(key)
-}
+// (geometrias e corpo movidos para VisitorModel.jsx)
 
 function shortestAngle(from, to) {
   let delta = to - from
@@ -139,17 +102,19 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
     lastArtId: null,
     until: 0,
     started: false,
-    // Lado preferido de desvio: evita que dois NPCs escolham o mesmo lado
     avoidSide: entrySide,
-    // Detector de travamento
     stuckCheckAt: 0,
     stuckX: 0,
     stuckZ: 0,
     stuckRetries: 0,
-    // Timestamp em que entrou em 'leaving' (para timeout de despawn)
     leavingAt: 0,
+    // Fala
+    speechText: null,
+    speechUntil: 0,
+    speechCooldownUntil: 0,
+    speechArmedAt: 0,
   })
-  const yaw = useRef(Math.PI) // entra olhando para o norte (para dentro do museu)
+  const yaw = useRef(Math.PI)
   const separation = useRef({ x: 0, z: 0 })
 
   useEffect(() => () => removeAgent(npcId), [npcId])
@@ -289,6 +254,11 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
               (state.look
                 ? VIEW_MIN + Math.random() * (VIEW_MAX - VIEW_MIN)
                 : REST_MIN + Math.random() * (REST_MAX - REST_MIN))
+            // Agenda fala positiva ao observar obra
+            if (state.mode === 'viewing') {
+              state.speechArmedAt =
+                time + SPEECH_DELAY_MIN + Math.random() * (SPEECH_DELAY_MAX - SPEECH_DELAY_MIN)
+            }
           }
         }
       } else {
@@ -448,183 +418,244 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
     updateAgent(npcId, position.x, position.z)
     motion.current.walking = moving
     motion.current.viewing = state.mode === 'viewing'
+
+    // ---------- Fala positiva (uma tentativa ao atingir o delay) ----------
+    if (
+      state.mode === 'viewing' &&
+      state.speechArmedAt > 0 &&
+      time >= state.speechArmedAt
+    ) {
+      state.speechArmedAt = 0
+      if (
+        time >= state.speechCooldownUntil &&
+        !state.speechText &&
+        canStartSpeech(time) &&
+        Math.random() < SPEECH_CHANCE
+      ) {
+        state.speechText = pickPositiveLine()
+        state.speechUntil = time + SPEECH_DURATION
+        markSpeechStarted(time)
+      }
+    }
+    if (state.speechText && time >= state.speechUntil) {
+      state.speechText = null
+      state.speechCooldownUntil = time + SPEECH_COOLDOWN
+    }
+    motion.current.speech = state.speechText
+    motion.current.yaw = yaw.current
   })
 }
 
-// ---------- Corpo articulado ----------
-function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion }) {
-  const torso = useRef(null)
-  const head = useRef(null)
-  const leftLeg = useRef(null)
-  const rightLeg = useRef(null)
-  const leftKnee = useRef(null)
-  const rightKnee = useRef(null)
-  const leftArm = useRef(null)
-  const rightArm = useRef(null)
-  const leftElbow = useRef(null)
-  const rightElbow = useRef(null)
-  const phase = useRef(Math.random() * Math.PI * 2)
-
-  const mats = useMemo(
-    () => ({
-      skin: sharedMaterial(appearance.skin, 0.72),
-      hair: sharedMaterial(appearance.hair, 0.88),
-      shirt: sharedMaterial(appearance.shirt, 0.78),
-      pants: sharedMaterial(appearance.pants, 0.8),
-      shoes: sharedMaterial(appearance.shoes, 0.55),
-      outerwear: sharedMaterial(appearance.shirt, 0.78, THREE.DoubleSide),
-    }),
-    [appearance]
-  )
-
-  useFrame((state, delta) => {
-    const dt = Math.min(delta, 0.05)
-    const walking = motion.current.walking
-    const viewing = motion.current.viewing
-    const time = state.clock.elapsedTime
-
-    phase.current += dt * (walking ? STEP_FREQ : 1.6)
-    const p = phase.current
-    const swing = Math.sin(p) * (walking ? 0.58 : 0.05)
-    const bob = Math.abs(Math.sin(p)) * (walking ? 0.032 : 0.006)
-
-    if (leftLeg.current) leftLeg.current.rotation.x = swing
-    if (rightLeg.current) rightLeg.current.rotation.x = -swing
-    if (leftKnee.current) leftKnee.current.rotation.x = -Math.max(0, -Math.sin(p)) * (walking ? 1.0 : 0.08)
-    if (rightKnee.current) rightKnee.current.rotation.x = -Math.max(0, Math.sin(p)) * (walking ? 1.0 : 0.08)
-    if (leftArm.current) leftArm.current.rotation.x = -swing * 0.7
-    if (rightArm.current) rightArm.current.rotation.x = swing * 0.7
-    const eb = walking ? 0.35 : 0.2
-    if (leftElbow.current) leftElbow.current.rotation.x = eb + Math.max(0, -swing) * 0.4
-    if (rightElbow.current) rightElbow.current.rotation.x = eb + Math.max(0, swing) * 0.4
-
-    if (torso.current) {
-      torso.current.position.y = bob
-      torso.current.rotation.z = viewing ? Math.sin(time * 0.6) * 0.03 : 0
-    }
-    if (head.current) {
-      head.current.rotation.y = viewing ? Math.sin(time * 0.45) * 0.34 : 0
-      head.current.rotation.x = viewing ? Math.sin(time * 0.3) * 0.08 : 0
-    }
-  })
-
-  return (
-    <group>
-      <group ref={torso}>
-        <mesh geometry={GEO.pelvis} material={mats.pants} position={[0, 0.95, 0]} />
-        <mesh geometry={GEO.torso} material={mats.shirt} position={[0, 1.26, 0]} />
-        {outfit === 'dress' && (
-          <mesh geometry={GEO.skirt} material={mats.outerwear} position={[0, 0.86, 0]} />
-        )}
-        {outfit === 'coat' && (
-          <mesh geometry={GEO.coat} material={mats.outerwear} position={[0, 1.06, 0]} />
-        )}
-        <mesh geometry={GEO.joint} material={mats.shirt} position={[-0.19, 1.44, 0]} />
-        <mesh geometry={GEO.joint} material={mats.shirt} position={[0.19, 1.44, 0]} />
-        <mesh geometry={GEO.neck} material={mats.skin} position={[0, 1.55, 0]} />
-        <group ref={head} position={[0, 1.68, 0]}>
-          <mesh geometry={GEO.head} material={mats.skin} castShadow />
-          <mesh geometry={GEO.hair} material={mats.hair} position={[0, 0.012, 0]} />
-        </group>
-        <group ref={leftArm} position={[-0.21, 1.43, 0]}>
-          <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
-          <group ref={leftElbow} position={[0, -0.25, 0]}>
-            <mesh geometry={GEO.foreArm} material={mats.skin} position={[0, -0.12, 0]} />
-            <mesh geometry={GEO.hand} material={mats.skin} position={[0, -0.25, 0]} />
-          </group>
-        </group>
-        <group ref={rightArm} position={[0.21, 1.43, 0]}>
-          <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
-          <group ref={rightElbow} position={[0, -0.25, 0]}>
-            <mesh geometry={GEO.foreArm} material={mats.skin} position={[0, -0.12, 0]} />
-            <mesh geometry={GEO.hand} material={mats.skin} position={[0, -0.25, 0]} />
-          </group>
-        </group>
-      </group>
-
-      <group ref={leftLeg} position={[-0.1, 0.9, 0]}>
-        <mesh geometry={GEO.thigh} material={mats.pants} position={[0, -0.22, 0]} />
-        <group ref={leftKnee} position={[0, -0.45, 0]}>
-          <mesh geometry={GEO.shin} material={mats.pants} position={[0, -0.18, 0]} />
-          <mesh geometry={GEO.foot} material={mats.shoes} position={[0, -0.38, 0.06]} />
-        </group>
-      </group>
-      <group ref={rightLeg} position={[0.1, 0.9, 0]}>
-        <mesh geometry={GEO.thigh} material={mats.pants} position={[0, -0.22, 0]} />
-        <group ref={rightKnee} position={[0, -0.45, 0]}>
-          <mesh geometry={GEO.shin} material={mats.pants} position={[0, -0.18, 0]} />
-          <mesh geometry={GEO.foot} material={mats.shoes} position={[0, -0.38, 0.06]} />
-        </group>
-      </group>
-    </group>
-  )
-}
-
-// ---------- Componente de um visitante ----------
-function VisitorNPC({ id, appearance, outfit, scale, entrySide, leaving, spawn }) {
+// ---------- Componente de um visitante (host / offline) ----------
+function HostVisitorNPC({ id, name, appearance, outfit, scale, entrySide, leaving, spawn }) {
   const despawn = useVisitorStore((s) => s.despawn)
   const group = useRef(null)
-  const motion = useRef({ walking: true, viewing: false })
+  const motion = useRef({ walking: true, viewing: false, speech: null, yaw: Math.PI })
+  const [bubble, setBubble] = useState(null)
+  const lastBubble = useRef(null)
+  const frameN = useRef(0)
 
-  // Escreve a posicao no Map global para as portas detectarem proximidade
+  useVisitorBrain(group, id, entrySide, leaving, motion, () => despawn(id))
+
   useFrame(() => {
     const g = group.current
     if (!g) return
     let entry = npcPosMap.get(id)
-    if (!entry) { entry = [0, 0]; npcPosMap.set(id, entry) }
+    if (!entry) {
+      entry = [0, 0]
+      npcPosMap.set(id, entry)
+    }
+    entry[0] = g.position.x
+    entry[1] = g.position.z
+
+    const sp = motion.current.speech || null
+    frameN.current++
+    if (frameN.current % 10 === 0 && sp !== lastBubble.current) {
+      lastBubble.current = sp
+      setBubble(sp)
+    }
+
+    updateNpcSnapshot(id, {
+      id,
+      name,
+      appearance,
+      outfit,
+      scale,
+      x: g.position.x,
+      z: g.position.z,
+      yaw: motion.current.yaw ?? g.rotation.y,
+      walking: !!motion.current.walking,
+      viewing: !!motion.current.viewing,
+      speech: sp,
+    })
+  })
+
+  useEffect(() => {
+    return () => {
+      npcPosMap.delete(id)
+      removeNpcSnapshot(id)
+    }
+  }, [id])
+
+  return (
+    <>
+      <BlobShadow target={group} />
+      <group ref={group} position={spawn} scale={scale}>
+        <VisitorModel
+          appearance={appearance || DEFAULT_APPEARANCE_FALLBACK}
+          outfit={outfit}
+          motion={motion}
+          name={name}
+          speech={bubble}
+        />
+      </group>
+    </>
+  )
+}
+
+/** NPC interpolado a partir do snapshot do host (clientes). */
+function RemoteVisitorNPC({ data }) {
+  const group = useRef(null)
+  const motion = useRef({ walking: false, viewing: false })
+  const target = useRef({ x: data.x || 0, z: data.z || 0, yaw: data.yaw || 0 })
+
+  useEffect(() => {
+    target.current = { x: data.x || 0, z: data.z || 0, yaw: data.yaw || 0 }
+    motion.current.walking = !!data.walking
+    motion.current.viewing = !!data.viewing
+  }, [data])
+
+  useFrame((_, delta) => {
+    const g = group.current
+    if (!g) return
+    const dt = Math.min(delta, 0.05)
+    const t = target.current
+    g.position.x += (t.x - g.position.x) * Math.min(1, 8 * dt)
+    g.position.z += (t.z - g.position.z) * Math.min(1, 8 * dt)
+    let dy = t.yaw - g.rotation.y
+    while (dy > Math.PI) dy -= Math.PI * 2
+    while (dy < -Math.PI) dy += Math.PI * 2
+    g.rotation.y += dy * Math.min(1, 8 * dt)
+
+    let entry = npcPosMap.get(data.id)
+    if (!entry) {
+      entry = [0, 0]
+      npcPosMap.set(data.id, entry)
+    }
     entry[0] = g.position.x
     entry[1] = g.position.z
   })
 
-  useEffect(() => {
-    return () => { npcPosMap.delete(id) }
-  }, [id])
+  useEffect(() => () => npcPosMap.delete(data.id), [data.id])
 
-  useVisitorBrain(group, id, entrySide, leaving, motion, () => despawn(id))
+  const scale = data.scale || [1, 1, 1]
 
   return (
     <>
-      {/* BlobShadow fora do grupo escalado: acompanha a posicao world do NPC
-          sem ser distorcida pela escala do corpo (scaleY diferente de 1). */}
       <BlobShadow target={group} />
-      <group ref={group} position={spawn} scale={scale}>
-        <VisitorBody appearance={appearance} outfit={outfit} motion={motion} />
+      <group ref={group} position={[data.x || 0, 0, data.z || 0]} scale={scale}>
+        <VisitorModel
+          appearance={data.appearance || DEFAULT_APPEARANCE_FALLBACK}
+          outfit={data.outfit || 'shirt'}
+          motion={motion}
+          name={data.name}
+          speech={data.speech || null}
+        />
       </group>
     </>
   )
 }
 
 /**
- * Ticker global: atualiza o fluxo de visitantes a cada frame.
- * Renderizado UMA vez dentro do Canvas.
+ * Ticker: avanca relogio; host inicia spawn e publica snapshot.
  */
 export function VisitorFlowTicker() {
   const tick = useVisitorStore((s) => s.tick)
   const init = useVisitorStore((s) => s.init)
+  const hydrateFromSnapshot = useVisitorStore((s) => s.hydrateFromSnapshot)
+  const lastPub = useRef(0)
+  const wasHost = useRef(null)
+  const remoteCache = useRef([])
 
   useFrame((_, delta) => {
-    // Unico ponto que avanca o relogio da simulacao. Renderizado no topo da
-    // arvore para que os NPCs leiam sim.time ja atualizado no mesmo frame.
     const t = advanceSim(delta)
-    init(t)
-    tick(t)
+    const host = isRoomHost() || isMultiplayerOffline()
+
+    if (isMultiplayerConnected()) {
+      try {
+        const snap = roomGetState('npcs')
+        if (Array.isArray(snap)) remoteCache.current = snap
+      } catch {
+        /* ainda nao conectado */
+      }
+    }
+
+    if (wasHost.current === null) {
+      wasHost.current = host
+      if (host) init(t)
+      else if (remoteCache.current.length) hydrateFromSnapshot(remoteCache.current, t)
+    } else if (!wasHost.current && host) {
+      hydrateFromSnapshot(remoteCache.current, t)
+      wasHost.current = true
+    } else if (wasHost.current && !host) {
+      wasHost.current = false
+    }
+
+    if (host) {
+      if (!useVisitorStore.getState()._initialized) init(t)
+      tick(t)
+      const nowMs = performance.now()
+      if (nowMs - lastPub.current >= NPC_SNAPSHOT_MS) {
+        lastPub.current = nowMs
+        publishNpcs(buildNpcSnapshot())
+      }
+    }
   })
 
   return null
 }
 
 /**
- * Exportacao principal: renderiza todos os visitantes ativos.
+ * Renderiza NPCs: host simula; clientes leem snapshot Playroom.
  */
 export default function VisitorLayer() {
   const visitors = useVisitorStore((s) => s.visitors)
+  const [remoteNpcs, setRemoteNpcs] = useState([])
+  const [host, setHost] = useState(() => isRoomHost() || isMultiplayerOffline())
+  const poll = useRef(0)
+
+  useFrame(() => {
+    poll.current++
+    if (poll.current % 12 !== 0) return
+    const nowHost = isRoomHost() || isMultiplayerOffline()
+    if (nowHost !== host) setHost(nowHost)
+    if (!nowHost && isMultiplayerConnected()) {
+      try {
+        const snap = roomGetState('npcs')
+        if (Array.isArray(snap)) setRemoteNpcs(snap)
+      } catch {
+        /* ignore */
+      }
+    }
+  })
+
+  if (!host) {
+    return (
+      <>
+        {remoteNpcs.map((n) => (
+          <RemoteVisitorNPC key={n.id} data={n} />
+        ))}
+      </>
+    )
+  }
 
   return (
     <>
       {visitors.map((v) => (
-        <VisitorNPC
+        <HostVisitorNPC
           key={v.key}
           id={v.id}
+          name={v.name}
           appearance={v.appearance}
           outfit={v.outfit}
           scale={v.scale}

@@ -2,31 +2,30 @@ import { useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGameStore } from '../store'
 import VirtualControls from './VirtualControls'
+import { generateAppearance, sanitizeNick } from '../systems/appearance'
+import { connectMultiplayer } from '../systems/multiplayer'
 
 /**
- * UIOverlay: toda a interface HTML sobreposta ao <Canvas>.
- *  - Tela inicial ("Entrar") -> inicia o jogo e (no desktop) captura o mouse.
- *  - Mira central (desktop).
- *  - Modal deslizante com a historia da obra (Framer Motion).
- *  - Overlay "Clique para continuar" quando o mouse e liberado sem modal.
- *  - Controles virtuais (apenas mobile).
- *
- * Le o store com seletores especificos para minimizar re-renderizacoes.
+ * UIOverlay: interface HTML sobreposta ao Canvas.
  */
 export default function UIOverlay() {
   const isMobile = useGameStore((s) => s.isMobile)
   const isStarted = useGameStore((s) => s.isStarted)
   const selectedArtwork = useGameStore((s) => s.selectedArtwork)
-  const focusedArtwork  = useGameStore((s) => s.focusedArtwork)
+  const focusedArtwork = useGameStore((s) => s.focusedArtwork)
   const isPointerLocked = useGameStore((s) => s.isPointerLocked)
   const beginPlaying = useGameStore((s) => s.beginPlaying)
   const closeArtwork = useGameStore((s) => s.closeArtwork)
   const lockPointer = useGameStore((s) => s.lockPointer)
+  const setPlayerIdentity = useGameStore((s) => s.setPlayerIdentity)
+  const setMpStatus = useGameStore((s) => s.setMpStatus)
 
   const wantsResume = isStarted && !isMobile && !selectedArtwork && !isPointerLocked
   const [showResume, setShowResume] = useState(false)
+  const [nick, setNick] = useState('')
+  const [nickError, setNickError] = useState('')
+  const [joining, setJoining] = useState(false)
 
-  // Evita flash do overlay enquanto o browser confirma o pointer lock (Entrar / Fechar).
   useEffect(() => {
     if (!wantsResume) {
       setShowResume(false)
@@ -36,9 +35,26 @@ export default function UIOverlay() {
     return () => clearTimeout(timer)
   }, [wantsResume])
 
+  const handleEnter = async () => {
+    const name = sanitizeNick(nick)
+    if (!name) {
+      setNickError('Digite um nick com 2 a 16 caracteres.')
+      return
+    }
+    setNickError('')
+    setJoining(true)
+
+    const { appearance, outfit, scale } = generateAppearance()
+    setPlayerIdentity({ name, appearance, outfit, scale })
+
+    const result = await connectMultiplayer({ name, appearance, outfit, scale })
+    setMpStatus({ ready: true, offline: result.offline })
+    setJoining(false)
+    beginPlaying()
+  }
+
   return (
     <div className="pointer-events-none fixed inset-0 z-10">
-      {/* Alvo dummy: o drei so relocka o mouse se este elemento for clicado. */}
       <button
         id="pointer-lock-target"
         type="button"
@@ -60,16 +76,34 @@ export default function UIOverlay() {
             <h1 className="mb-3 text-4xl font-light tracking-wide text-white md:text-5xl">
               Museu de Arte Virtual
             </h1>
-            <p className="mb-8 max-w-md px-6 text-sm text-white/70">
+            <p className="mb-6 max-w-md px-6 text-sm text-white/70">
               {isMobile
-                ? 'Use o joystick a esquerda para andar e arraste o lado direito da tela para olhar. Toque em uma obra para ver a historia.'
-                : 'Use W A S D para andar e o mouse para olhar. Clique em uma obra para ver a historia e usar o cursor. Feche o painel pelo botao Fechar.'}
+                ? 'Use o joystick à esquerda para andar e arraste o lado direito para olhar. Aproxime-se de uma obra para interagir.'
+                : 'Use W A S D para andar e o mouse para olhar. Aponte para uma obra e pressione E. Outros visitantes online aparecem no museu.'}
             </p>
+
+            <label className="mb-2 text-xs uppercase tracking-wide text-white/50">
+              Seu nick
+            </label>
+            <input
+              type="text"
+              value={nick}
+              maxLength={16}
+              placeholder="Ex: Marina"
+              onChange={(e) => setNick(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleEnter()
+              }}
+              className="mb-2 w-64 rounded-full border border-white/30 bg-white/10 px-5 py-2.5 text-center text-white placeholder:text-white/40 outline-none focus:border-white/60"
+            />
+            {nickError && <p className="mb-2 text-xs text-red-300">{nickError}</p>}
+
             <button
-              onClick={beginPlaying}
-              className="rounded-full border border-white/40 px-10 py-3 text-lg font-medium text-white transition hover:bg-white hover:text-black"
+              onClick={handleEnter}
+              disabled={joining}
+              className="mt-4 rounded-full border border-white/40 px-10 py-3 text-lg font-medium text-white transition hover:bg-white hover:text-black disabled:opacity-50"
             >
-              Entrar
+              {joining ? 'Conectando…' : 'Entrar'}
             </button>
           </motion.div>
         )}

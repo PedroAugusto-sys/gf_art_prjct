@@ -5,6 +5,7 @@ import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { playerPosRef } from '../systems/proximityRefs'
+import { publishPose, isMultiplayerConnected, POSE_INTERVAL_MS } from '../systems/multiplayer'
 
 // ---------- Constantes de locomocao ----------
 const WALK_SPEED = 5 // metros/segundo
@@ -22,6 +23,7 @@ const frontVector = new THREE.Vector3()
 const sideVector = new THREE.Vector3()
 const direction = new THREE.Vector3()
 const worldUp = new THREE.Vector3(0, 1, 0)
+const camEuler = new THREE.Euler()
 
 /**
  * Player: corpo fisico em primeira pessoa.
@@ -60,6 +62,8 @@ export default function Player({ position = [0, 2, 12] }) {
   // Angulos de camera para o modo mobile (yaw = horizontal, pitch = vertical)
   const yaw = useRef(0)
   const pitch = useRef(0)
+  const lastPosePub = useRef(0)
+  const wasMoving = useRef(false)
 
   // ---------- Teclado (apenas desktop) ----------
   useEffect(() => {
@@ -164,6 +168,28 @@ export default function Player({ position = [0, 2, 12] }) {
 
     camera.position.set(t.x, t.y + EYE_HEIGHT, t.z)
 
+    // Sync pose mesmo quando pausado (outros veem o avatar parado)
+    const publishNow = () => {
+      if (!isMultiplayerConnected()) return
+      const now = performance.now()
+      if (now - lastPosePub.current < POSE_INTERVAL_MS) return
+      lastPosePub.current = now
+      let lookYaw = yaw.current
+      let lookPitch = pitch.current
+      if (!mobile) {
+        camEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+        lookYaw = camEuler.y
+        lookPitch = camEuler.x
+      }
+      publishPose({
+        x: t.x,
+        z: t.z,
+        yaw: lookYaw,
+        pitch: lookPitch,
+        walking: wasMoving.current,
+      })
+    }
+
     // 2) Look no mobile: consome o delta de arraste e aplica a camera
     if (mobile) {
       const look = useGameStore.getState().consumeLook()
@@ -179,6 +205,8 @@ export default function Player({ position = [0, 2, 12] }) {
     const linvel = body.linvel()
     if (isMovementPaused || (!mobile && !isPointerLocked)) {
       body.setLinvel({ x: 0, y: linvel.y, z: 0 }, true)
+      wasMoving.current = false
+      publishNow()
       return
     }
 
@@ -218,6 +246,8 @@ export default function Player({ position = [0, 2, 12] }) {
 
     // 6) Aplica velocidade preservando a gravidade (Y)
     body.setLinvel({ x: direction.x, y: linvel.y, z: direction.z }, true)
+    wasMoving.current = direction.lengthSq() > 0.01
+    publishNow()
   })
 
   return (
