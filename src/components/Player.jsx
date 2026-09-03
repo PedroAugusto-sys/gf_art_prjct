@@ -78,15 +78,38 @@ export default function Player({ position = [0, 2, 12] }) {
       KeyD: 'right',
       ArrowRight: 'right',
     }
+
+    /** Ignora WASD/R enquanto o usuario digita (nick, etc.) ou o jogo nao comecou. */
+    const shouldIgnoreKeyboard = () => {
+      const { isStarted, isMovementPaused } = useGameStore.getState()
+      if (!isStarted || isMovementPaused) return true
+      const el = document.activeElement
+      if (!el) return false
+      const tag = el.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+      if (el.isContentEditable) return true
+      return false
+    }
+
     const onKeyDown = (e) => {
-      // Tecla R: reseta posicao do jogador
-      if (e.code === 'KeyR') { resetPosition(); return }
+      if (shouldIgnoreKeyboard()) return
+      if (e.code === 'KeyR') {
+        resetPosition()
+        return
+      }
       const action = map[e.code]
-      if (action) { keys.current[action] = true; e.preventDefault() }
+      if (action) {
+        keys.current[action] = true
+        e.preventDefault()
+      }
     }
     const onKeyUp = (e) => {
+      // Sempre libera teclas ao soltar (evita stuck se o foco mudou mid-press)
       const action = map[e.code]
-      if (action) { keys.current[action] = false; e.preventDefault() }
+      if (action) {
+        keys.current[action] = false
+        if (!shouldIgnoreKeyboard()) e.preventDefault()
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)
