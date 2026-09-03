@@ -115,25 +115,34 @@ export default function UIOverlay() {
       )}
 
       {/* ============ BOTAO MOBILE: obra proxima por distancia ============ */}
+      {/* Fixo no centro-baixo da tela, sem translate que pode deslocar a hitbox.
+          Padding generoso (py-5 px-10) garante area de toque facil com o polegar. */}
       <AnimatePresence>
         {isStarted && !selectedArtwork && isMobile && focusedArtwork && (
-          <motion.button
-            key="mobile-interact"
+          <motion.div
+            key="mobile-interact-wrap"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 0.18 }}
-            onClick={() => {
-              useGameStore.getState().openArtwork(focusedArtwork)
-            }}
-            className="pointer-events-auto absolute bottom-36 left-1/2 -translate-x-1/2 flex items-center gap-3 rounded-2xl bg-white/95 px-7 py-4 text-base font-semibold text-neutral-900 shadow-xl active:scale-95"
+            style={{ position: 'absolute', bottom: 140, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}
           >
-            {/* Icone de imagem */}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-neutral-700">
-              <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
-            </svg>
-            Ver obra
-          </motion.button>
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                e.stopPropagation()
+                useGameStore.getState().openArtwork(focusedArtwork)
+              }}
+              style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+              className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-white px-10 py-5 text-lg font-bold text-neutral-900 shadow-2xl active:scale-95 transition-transform select-none"
+            >
+              {/* Icone olho */}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6 shrink-0 text-neutral-700">
+                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
+              </svg>
+              Ver obra
+            </button>
+          </motion.div>
         )}
       </AnimatePresence>
 
