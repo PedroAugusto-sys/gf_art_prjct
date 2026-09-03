@@ -20,6 +20,7 @@ export default function UIOverlay() {
   const beginPlaying = useGameStore((s) => s.beginPlaying)
   const closeArtwork = useGameStore((s) => s.closeArtwork)
   const lockPointer = useGameStore((s) => s.lockPointer)
+  const returnToVersionSelect = useGameStore((s) => s.returnToVersionSelect)
   const setPlayerIdentity = useGameStore((s) => s.setPlayerIdentity)
   const setMpStatus = useGameStore((s) => s.setMpStatus)
   const selectedVersionId = useGameStore((s) => s.selectedVersionId)
@@ -41,6 +42,24 @@ export default function UIOverlay() {
     const timer = setTimeout(() => setShowResume(true), 220)
     return () => clearTimeout(timer)
   }, [wantsResume])
+
+  // ESC com mouse livre (ex.: overlay "continuar" ou modal de obra).
+  // Com pointer lock, o browser engole o ESC — o store trata via onUnlock.
+  useEffect(() => {
+    if (!isStarted) return
+    const onKey = (e) => {
+      if (e.code !== 'Escape' && e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      returnToVersionSelect()
+    }
+    window.addEventListener('keyup', onKey, true)
+    window.addEventListener('keydown', onKey, true)
+    return () => {
+      window.removeEventListener('keyup', onKey, true)
+      window.removeEventListener('keydown', onKey, true)
+    }
+  }, [isStarted, returnToVersionSelect])
 
   const handleEnter = async () => {
     const name = sanitizeNick(nick)
@@ -89,7 +108,7 @@ export default function UIOverlay() {
             className="pointer-events-auto absolute inset-0 flex flex-col items-center justify-center overflow-y-auto bg-black/80 py-8 text-center"
           >
             <h1 className="mb-2 text-4xl font-light tracking-wide text-white md:text-5xl">
-              Museu de Arte Virtual
+              Meu Museu
             </h1>
             <p className="mb-5 max-w-md px-6 text-sm text-white/70">
               Escolha uma versão na linha do tempo (cada uma é uma sala online distinta),
@@ -156,6 +175,20 @@ export default function UIOverlay() {
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
           <div className="h-2 w-2 rounded-full border border-white/70 bg-white/20" />
         </div>
+      )}
+
+      {/* ============ ESC · versoes ============ */}
+      {isStarted && (
+        <button
+          type="button"
+          onClick={returnToVersionSelect}
+          className="pointer-events-auto absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm hover:bg-black/70"
+        >
+          <span className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
+            ESC
+          </span>
+          Versões
+        </button>
       )}
 
       {/* ============ PROMPT DESKTOP: obra em foco pela mira ============ */}

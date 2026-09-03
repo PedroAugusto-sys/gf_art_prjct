@@ -8,7 +8,7 @@ export const VERSIONS = [
     id: 'v0',
     title: 'Inicial',
     dateLabel: 'Início',
-    blurb: 'Protótipo: blockout sem paredes/pilares/árvores, NPCs instáveis e multiplayer.',
+    blurb: 'Versão inicial: blockout sem paredes/pilares/árvores, NPCs instáveis e multiplayer.',
     roomCode: 'gf-museu-v0',
     status: 'playable', // playable | coming
     flags: { legacyNpcs: true, prototypeScene: true },
@@ -17,9 +17,9 @@ export const VERSIONS = [
     id: 'v1',
     title: 'Atual',
     dateLabel: 'Agora',
-    blurb: 'Versão atual: navegação estável, falas, interação e multiplayer.',
+    blurb: 'Indisponível por enquanto — em breve.',
     roomCode: 'gf-museu-v1',
-    status: 'playable',
+    status: 'coming',
     flags: { legacyNpcs: false, prototypeScene: false },
   },
   {
@@ -42,22 +42,35 @@ export const VERSIONS = [
   },
 ]
 
-export const DEFAULT_VERSION_ID = 'v1'
+export const DEFAULT_VERSION_ID = 'v0'
+
+export function getPlayableVersions() {
+  return VERSIONS.filter((v) => v.status === 'playable')
+}
 
 export function getVersionById(id) {
-  return VERSIONS.find((v) => v.id === id) || VERSIONS.find((v) => v.id === DEFAULT_VERSION_ID)
+  const found = VERSIONS.find((v) => v.id === id)
+  if (found) return found
+  return VERSIONS.find((v) => v.status === 'playable') || VERSIONS[0]
+}
+
+/** Sempre devolve uma versão jogável (ignora coming). */
+export function resolvePlayableVersion(id) {
+  const found = VERSIONS.find((v) => v.id === id)
+  if (found?.status === 'playable') return found
+  return getVersionById(DEFAULT_VERSION_ID)
 }
 
 export function getVersionByRoomCode(code) {
   if (!code) return null
   const normalized = String(code).trim().toLowerCase()
-  return (
-    VERSIONS.find((v) => v.roomCode.toLowerCase() === normalized) ||
-    // Aceita legado do link antigo
-    (normalized === 'gf-museu' || normalized === 'rgf-museu'
-      ? getVersionById(DEFAULT_VERSION_ID)
-      : null)
-  )
+  const match = VERSIONS.find((v) => v.roomCode.toLowerCase() === normalized)
+  if (match) return match
+  // Links antigos: cair na unica versao jogavel
+  if (normalized === 'gf-museu' || normalized === 'rgf-museu' || normalized === 'gf-museu-v1') {
+    return getVersionById(DEFAULT_VERSION_ID)
+  }
+  return null
 }
 
 /** Lê #r=CODE da URL atual. */
@@ -76,6 +89,7 @@ export function buildInviteUrl(roomCode) {
 
 export function versionFromUrl() {
   const code = parseRoomCodeFromHash()
-  if (!code) return getVersionById(DEFAULT_VERSION_ID)
-  return getVersionByRoomCode(code) || getVersionById(DEFAULT_VERSION_ID)
+  let v = code ? getVersionByRoomCode(code) : null
+  if (!v || v.status !== 'playable') v = getVersionById(DEFAULT_VERSION_ID)
+  return v
 }

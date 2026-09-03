@@ -1,6 +1,11 @@
 import { create } from 'zustand'
-import { publishViewingArt } from './systems/multiplayer'
-import { DEFAULT_VERSION_ID, versionFromUrl, getVersionById } from './data/versions'
+import { publishViewingArt, resetMultiplayerSession } from './systems/multiplayer'
+import {
+  DEFAULT_VERSION_ID,
+  versionFromUrl,
+  getVersionById,
+  resolvePlayableVersion,
+} from './data/versions'
 
 /**
  * Detecta de forma simples se o dispositivo e mobile/touch.
@@ -36,11 +41,23 @@ let unlockPointerFn = null
 const LOCK_COOLDOWN_MS = 1400
 let lastUnlockAt = 0
 let pendingLockTimer = null
+/** true quando o unlock e nosso (obra, menu) — nao abrir menu de versoes. */
+let skipVersionMenuOnUnlock = false
 
 function cancelPendingLock() {
   if (pendingLockTimer !== null) {
     clearTimeout(pendingLockTimer)
     pendingLockTimer = null
+  }
+}
+
+function unlockPointerIntentional() {
+  skipVersionMenuOnUnlock = true
+  cancelPendingLock()
+  try {
+    unlockPointerFn?.()
+  } catch {
+    /* ja destravado */
   }
 }
 
@@ -118,13 +135,29 @@ export const useGameStore = create((set, get) => ({
   // Espelho do pointer lock (desktop). A UI usa para mira / "clique para continuar".
   isPointerLocked: false,
   setPointerLocked: (value) => {
+    const prev = get().isPointerLocked
     // Registra a saida do lock para respeitar a janela de bloqueio do navegador.
     if (!value) {
       lastUnlockAt = performance.now()
       cancelPendingLock()
     }
-    if (get().isPointerLocked === value) return
+    if (prev === value) {
+      if (!value) skipVersionMenuOnUnlock = false
+      return
+    }
     set({ isPointerLocked: value })
+
+    // Com pointer lock, o ESC e consumido pelo browser e o keydown nao chega.
+    // Sair do lock (ESC) enquanto joga → menu de versoes.
+    if (prev && !value) {
+      const skip = skipVersionMenuOnUnlock
+      skipVersionMenuOnUnlock = false
+      if (!skip && get().isStarted && !get().isMobile && !get().selectedArtwork) {
+        queueMicrotask(() => {
+          if (get().isStarted) get().returnToVersionSelect()
+        })
+      }
+    }
   },
 
   registerPointerControls: (lock, unlock) => {
@@ -133,22 +166,10 @@ export const useGameStore = create((set, get) => ({
     if (!lock) cancelPendingLock()
   },
   lockPointer: () => requestLock(),
-  unlockPointer: () => {
-    cancelPendingLock()
-    try {
-      unlockPointerFn?.()
-    } catch {
-      /* ja destravado */
-    }
-  },
+  unlockPointer: () => unlockPointerIntentional(),
 
   openArtwork: (artwork) => {
-    cancelPendingLock()
-    try {
-      unlockPointerFn?.()
-    } catch {
-      /* ja destravado */
-    }
+    unlockPointerIntentional()
     set({ selectedArtwork: artwork, isMovementPaused: true })
     publishViewingArt(artwork?.id ?? null)
   },
@@ -166,6 +187,27 @@ export const useGameStore = create((set, get) => ({
   beginPlaying: () => {
     set({ isStarted: true, isMovementPaused: false })
     if (!get().isMobile) requestLock()
+  },
+
+  /** ESC: volta para a tela de nick / timeline para trocar de versao. */
+  returnToVersionSelect: () => {
+    skipVersionMenuOnUnlock = true
+    cancelPendingLock()
+    try {
+      unlockPointerFn?.()
+    } catch {
+      /* ignore */
+    }
+    resetMultiplayerSession()
+    set({
+      isStarted: false,
+      isMovementPaused: true,
+      selectedArtwork: null,
+      focusedArtwork: null,
+      isPointerLocked: false,
+      mpReady: false,
+    })
+    skipVersionMenuOnUnlock = false
   },
 
   // ---------- Multiplayer / identidade ----------
@@ -187,10 +229,14 @@ export const useGameStore = create((set, get) => ({
 
   // ---------- Versao / timeline ----------
   selectedVersionId:
-    typeof window !== 'undefined' ? versionFromUrl().id : DEFAULT_VERSION_ID,
+    typeof window !== 'undefined'
+      ? resolvePlayableVersion(versionFromUrl().id).id
+      : DEFAULT_VERSION_ID,
   setSelectedVersion: (id) => {
-    const v = getVersionById(id)
+    const v = resolvePlayableVersion(id)
     if (!v || v.status !== 'playable') return
+    // Nao permite selecionar versoes bloqueadas
+    if (getVersionById(id)?.status !== 'playable') return
     set({ selectedVersionId: v.id })
     if (typeof window !== 'undefined') {
       const next = `#r=${encodeURIComponent(v.roomCode)}`
@@ -199,9 +245,22 @@ export const useGameStore = create((set, get) => ({
       }
     }
   },
+  /** Corrige selecao presa em versao bloqueada (ex.: HMR / link antigo). */
+  ensurePlayableVersion: () => {
+    const current = getVersionById(get().selectedVersionId)
+    if (current?.status === 'playable') return
+    const playable = resolvePlayableVersion(DEFAULT_VERSION_ID)
+    set({ selectedVersionId: playable.id })
+    if (typeof window !== 'undefined') {
+      const next = `#r=${encodeURIComponent(playable.roomCode)}`
+      if (window.location.hash !== next) {
+        window.history.replaceState(null, '', next)
+      }
+    }
+  },
   /** Flags da versao ativa (ex.: legacyNpcs). */
   getVersionFlags: () => {
-    const v = getVersionById(get().selectedVersionId)
+    const v = resolvePlayableVersion(get().selectedVersionId)
     return v?.flags || {}
   },
 

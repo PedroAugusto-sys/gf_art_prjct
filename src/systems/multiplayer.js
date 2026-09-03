@@ -141,3 +141,10 @@ export function getLocalPlayer() {
     return null
   }
 }
+
+/** Volta ao menu: permite conectar de novo / trocar de sala. */
+export function resetMultiplayerSession() {
+  connected = false
+  offline = false
+  activeRoomCode = null
+}
