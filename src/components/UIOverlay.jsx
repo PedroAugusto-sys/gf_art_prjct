@@ -101,18 +101,41 @@ export default function UIOverlay() {
         </div>
       )}
 
-      {/* ============ PROMPT DE INTERACAO COM OBRA (mira em foco) ============ */}
-      {isStarted && !selectedArtwork && isPointerLocked && focusedArtwork && (
+      {/* ============ PROMPT DESKTOP: obra em foco pela mira ============ */}
+      {isStarted && !selectedArtwork && !isMobile && isPointerLocked && focusedArtwork && (
         <div className="absolute left-1/2 top-[54%] -translate-x-1/2 rounded-full bg-black/55 px-5 py-1.5 text-sm text-white/90 backdrop-blur-sm flex items-center gap-2">
           <span className="rounded border border-white/50 bg-white/10 px-1.5 py-0.5 font-mono text-xs">E</span>
           Ver obra
         </div>
       )}
 
+      {/* ============ BOTAO MOBILE: obra proxima por distancia ============ */}
+      <AnimatePresence>
+        {isStarted && !selectedArtwork && isMobile && focusedArtwork && (
+          <motion.button
+            key="mobile-interact"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.18 }}
+            onClick={() => {
+              useGameStore.getState().openArtwork(focusedArtwork)
+            }}
+            className="pointer-events-auto absolute bottom-36 left-1/2 -translate-x-1/2 flex items-center gap-3 rounded-2xl bg-white/95 px-7 py-4 text-base font-semibold text-neutral-900 shadow-xl active:scale-95"
+          >
+            {/* Icone de imagem */}
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-neutral-700">
+              <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
+            </svg>
+            Ver obra
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       {/* ============ DICA PERMANENTE ============ */}
       {isStarted && !selectedArtwork && (isMobile || isPointerLocked) && !focusedArtwork && (
         <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-black/40 px-4 py-1 text-xs text-white/70 backdrop-blur-sm">
-          {isMobile ? 'Toque em uma obra para saber mais' : 'Aponte para uma obra e pressione E'}
+          {isMobile ? 'Aproxime-se de uma obra para interagir' : 'Aponte para uma obra e pressione E'}
         </div>
       )}
 
