@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useGameStore } from '../store'
 import VirtualControls from './VirtualControls'
@@ -35,6 +35,8 @@ export default function UIOverlay() {
   const [nickError, setNickError] = useState('')
   const [joining, setJoining] = useState(false)
   const [offlineHint, setOfflineHint] = useState('')
+  /** Ignora clique/tap no backdrop logo apos abrir (ghost click do mesmo toque). */
+  const artworkOpenedAt = useRef(0)
 
   const activeVersion =
     getVersionById(selectedVersionId)?.status === 'playable'
@@ -44,6 +46,16 @@ export default function UIOverlay() {
   useEffect(() => {
     ensurePlayableVersion?.()
   }, [ensurePlayableVersion])
+
+  // Marca o instante em que a obra abriu (anti ghost-click no backdrop).
+  useEffect(() => {
+    if (selectedArtwork) artworkOpenedAt.current = performance.now()
+  }, [selectedArtwork])
+
+  const handleCloseArtwork = () => {
+    if (performance.now() - artworkOpenedAt.current < 400) return
+    closeArtwork()
+  }
 
   // Ao voltar do ESC, reaproveita o nick anterior no campo
   useEffect(() => {
@@ -245,29 +257,31 @@ export default function UIOverlay() {
       )}
 
       {/* ============ BOTAO MOBILE: obra proxima por distancia ============ */}
-      {/* Fixo no centro-baixo da tela, sem translate que pode deslocar a hitbox.
-          Padding generoso (py-5 px-10) garante area de toque facil com o polegar. */}
+      {/* Canto inferior direito, z acima do VirtualControls (look zone).
+          Abrir no onClick (nao onPointerDown): pointerdown montava o backdrop
+          antes do click do mesmo toque, que fechava a obra na hora. */}
       <AnimatePresence>
         {isStarted && !selectedArtwork && isMobile && focusedArtwork && (
           <motion.div
             key="mobile-interact-wrap"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 12 }}
             transition={{ duration: 0.18 }}
-            style={{ position: 'absolute', bottom: 140, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}
+            className="pointer-events-auto absolute bottom-36 right-4 z-30"
           >
             <button
               type="button"
-              onPointerDown={(e) => {
+              onClick={(e) => {
+                e.preventDefault()
                 e.stopPropagation()
+                artworkOpenedAt.current = performance.now()
                 useGameStore.getState().openArtwork(focusedArtwork)
               }}
               style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-              className="pointer-events-auto flex items-center gap-3 rounded-2xl bg-white px-10 py-5 text-lg font-bold text-neutral-900 shadow-2xl active:scale-95 transition-transform select-none"
+              className="flex items-center gap-2 rounded-2xl bg-white px-5 py-4 text-base font-bold text-neutral-900 shadow-2xl active:scale-95 transition-transform select-none"
             >
-              {/* Icone olho */}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6 shrink-0 text-neutral-700">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 shrink-0 text-neutral-700">
                 <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5ZM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5Zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/>
               </svg>
               Ver obra
@@ -293,7 +307,14 @@ export default function UIOverlay() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={closeArtwork}
+              onClick={handleCloseArtwork}
+              onPointerUp={(e) => {
+                // Mobile: o mesmo toque que abriu pode chegar aqui como pointerup
+                if (performance.now() - artworkOpenedAt.current < 400) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }
+              }}
               className="pointer-events-auto absolute inset-0 bg-black/50"
             />
 
