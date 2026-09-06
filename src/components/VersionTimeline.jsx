@@ -1,20 +1,32 @@
 /**
  * Régua horizontal de versões do museu.
+ * Só renderiza entradas com timelineVisible (ver src/data/versions.js).
  */
 
-import { VERSIONS } from '../data/versions'
+import { getTimelineVersions } from '../data/versions'
 
 export default function VersionTimeline({ selectedId, onSelect }) {
-  const selected = VERSIONS.find((v) => v.id === selectedId)
+  const visible = getTimelineVersions()
+  const selected = visible.find((v) => v.id === selectedId) || visible[0]
+  const single = visible.length <= 1
 
   return (
     <div className="mb-6 w-full max-w-lg px-4">
       <p className="mb-3 text-xs uppercase tracking-wide text-white/50">Linha do tempo</p>
-      <div className="relative flex items-start justify-between gap-1">
-        <div className="pointer-events-none absolute left-4 right-4 top-[11px] h-0.5 bg-white/20" />
-        {VERSIONS.map((v) => {
+      <div
+        className={`relative flex items-start gap-1 ${
+          single ? 'justify-center' : 'justify-between'
+        }`}
+      >
+        {!single && (
+          <div className="pointer-events-none absolute left-4 right-4 top-[11px] h-0.5 bg-white/20" />
+        )}
+        {visible.map((v) => {
           const isSelected = v.id === selectedId
           const locked = v.status !== 'playable'
+          const tip = locked
+            ? 'Indisponível por enquanto'
+            : v.blurb || v.title
           return (
             <button
               key={v.id}
@@ -28,7 +40,7 @@ export default function VersionTimeline({ selectedId, onSelect }) {
                 }
                 onSelect(v.id)
               }}
-              title={locked ? 'Indisponível por enquanto' : v.blurb}
+              title={tip}
               className={`relative z-[1] flex w-16 flex-col items-center gap-1.5 ${
                 locked
                   ? 'pointer-events-none cursor-not-allowed opacity-40'
@@ -58,9 +70,9 @@ export default function VersionTimeline({ selectedId, onSelect }) {
           )
         })}
       </div>
-      {selected?.blurb && (
+      {selected?.blurb ? (
         <p className="mt-3 text-center text-xs text-white/55">{selected.blurb}</p>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -3,6 +3,11 @@ node_modules
 .pnp
 .pnp.js
 
+# Env local (use .env.example como modelo)
+.env
+.env.*
+!.env.example
+
 # Build
 dist
 dist-ssr

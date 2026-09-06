@@ -3,8 +3,13 @@
  * Cada versão do museu usa um roomCode distinto.
  *
  * Importante: insertCoin() so pode ser chamado com sucesso uma vez por carga
- * da pagina. Chamar de novo (ex.: apos ESC) trava a Promise — por isso
- * mantemos a sessao e so republicamos identidade no re-entrar.
+ * da pagina. Chamar de novo apos sucesso trava a Promise — por isso, com
+ * sessao online, so republicamos identidade no re-entrar (ESC).
+ *
+ * Se insertCoin falhar ou estourar timeout local, NAO marcamos sessionBooted:
+ * a proxima tentativa pode chamar insertCoin de novo. Se o timeout local
+ * disparou com a Promise ainda pendente, a proxima tentativa faz reload
+ * (segundo insertCoin travaria).
  */
 
 import {
@@ -20,12 +25,20 @@ export const POSE_INTERVAL_MS = 100
 export const NPC_SNAPSHOT_MS = 180
 
 const INSERT_COIN_TIMEOUT_MS = 12000
+const PLAYROOM_GAME_ID_DOCS = 'https://docs.joinplayroom.com/errors/no-game-id'
 
 let connected = false
 let offline = false
-/** true apos o primeiro insertCoin (ok ou falha offline) nesta carga. */
+/** true apenas apos insertCoin com sucesso nesta carga. */
 let sessionBooted = false
 let activeRoomCode = null
+/**
+ * true se o timeout local disparou enquanto insertCoin ainda pode estar
+ * pendente — um segundo insertCoin nesta carga travaria; precisa reload.
+ */
+let insertCoinPossiblyPending = false
+/** Promise em voo do boot atual (evita double-call enquanto waiting). */
+let bootPromise = null
 
 export function isMultiplayerConnected() {
   return connected && !offline
@@ -50,18 +63,37 @@ export function isRoomHost() {
 
 function withTimeout(promise, ms, label) {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${label} timeout (${ms}ms)`)), ms)
+    let settled = false
+    const t = setTimeout(() => {
+      if (settled) return
+      settled = true
+      const err = new Error(`${label} timeout (${ms}ms)`)
+      err.isTimeout = true
+      reject(err)
+    }, ms)
     promise.then(
       (v) => {
+        if (settled) return
+        settled = true
         clearTimeout(t)
         resolve(v)
       },
       (e) => {
+        if (settled) return
+        settled = true
         clearTimeout(t)
         reject(e)
       }
     )
   })
+}
+
+function reloadForRoom(code) {
+  if (typeof window === 'undefined') return new Promise(() => {})
+  const next = `#r=${encodeURIComponent(code)}`
+  window.location.hash = next
+  window.location.reload()
+  return new Promise(() => {})
 }
 
 /**
@@ -81,21 +113,33 @@ export async function connectMultiplayer(identity, roomCode) {
     return { ok: true, offline: false, roomCode: code }
   }
 
-  // Offline na mesma sala: reentra sem novo insertCoin
-  if (sessionBooted && activeRoomCode === code && offline) {
-    publishIdentity(identity)
-    return { ok: false, offline: true, roomCode: code }
+  // Timeout anterior deixou insertCoin possivelmente pendente — reload seguro
+  if (insertCoinPossiblyPending) {
+    return reloadForRoom(code)
   }
 
-  // Troca de sala depois do primeiro boot: insertCoin de novo trava — recarrega
+  // Troca de sala depois do primeiro boot ok: insertCoin de novo trava — recarrega
   if (sessionBooted && activeRoomCode && activeRoomCode !== code) {
-    if (typeof window !== 'undefined') {
-      const next = `#r=${encodeURIComponent(code)}`
-      window.location.hash = next
-      window.location.reload()
+    return reloadForRoom(code)
+  }
+
+  // Boot ja em andamento (double-click): espera o mesmo promise
+  if (bootPromise) {
+    try {
+      await bootPromise
+      if (connected && !offline && activeRoomCode === code) {
+        publishIdentity(identity)
+        return { ok: true, offline: false, roomCode: code }
+      }
+    } catch {
+      /* cai no fluxo abaixo / offline */
     }
-    // Pagina vai recarregar; nao desbloqueia o botao
-    return new Promise(() => {})
+    if (insertCoinPossiblyPending) {
+      return reloadForRoom(code)
+    }
+    if (offline) {
+      return { ok: false, offline: true, roomCode: code }
+    }
   }
 
   const opts = {
@@ -104,13 +148,25 @@ export async function connectMultiplayer(identity, roomCode) {
     maxPlayersPerRoom: MAX_PLAYERS,
   }
   const gameId = import.meta.env.VITE_PLAYROOM_GAME_ID
-  if (gameId) opts.gameId = gameId
+  if (gameId) {
+    opts.gameId = gameId
+  } else if (typeof console !== 'undefined') {
+    console.warn(
+      `[multiplayer] VITE_PLAYROOM_GAME_ID nao definido. Playroom pode limitar DAU. Veja ${PLAYROOM_GAME_ID_DOCS}`
+    )
+  }
+
+  const run = (async () => {
+    await withTimeout(insertCoin(opts), INSERT_COIN_TIMEOUT_MS, 'insertCoin')
+  })()
+  bootPromise = run
 
   try {
-    await withTimeout(insertCoin(opts), INSERT_COIN_TIMEOUT_MS, 'insertCoin')
+    await run
     sessionBooted = true
     connected = true
     offline = false
+    insertCoinPossiblyPending = false
     activeRoomCode = code
     publishIdentity(identity)
     if (typeof window !== 'undefined') {
@@ -122,11 +178,21 @@ export async function connectMultiplayer(identity, roomCode) {
     return { ok: true, offline: false, roomCode: code }
   } catch (err) {
     console.warn('[multiplayer] Playroom indisponível, modo offline:', err)
-    sessionBooted = true
     connected = false
     offline = true
     activeRoomCode = code
+    // Timeout local: insertCoin pode ainda estar rodando — nao chamar de novo
+    if (err?.isTimeout) {
+      insertCoinPossiblyPending = true
+      // Nao setar sessionBooted; proxima tentativa = reload
+    } else {
+      // Rejeicao real do SDK: permite retry de insertCoin nesta carga
+      insertCoinPossiblyPending = false
+      sessionBooted = false
+    }
     return { ok: false, offline: true, error: err, roomCode: code }
+  } finally {
+    bootPromise = null
   }
 }
 
@@ -181,9 +247,13 @@ export function getLocalPlayer() {
 }
 
 /**
- * Volta ao menu: NAO derruba a sessao Playroom.
- * insertCoin nao pode ser chamado de novo sem reload.
+ * Volta ao menu: NAO derruba a sessao Playroom se estiver online.
+ * insertCoin nao pode ser chamado de novo com sucesso sem reload.
+ * Se estiver offline (falha limpa), limpa o flag para a UI permitir retry.
  */
 export function resetMultiplayerSession() {
-  // Mantem sessionBooted, activeRoomCode e flags de conexao.
+  if (offline && !sessionBooted && !insertCoinPossiblyPending) {
+    offline = false
+    activeRoomCode = null
+  }
 }

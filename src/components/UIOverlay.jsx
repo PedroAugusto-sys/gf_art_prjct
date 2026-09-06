@@ -23,6 +23,7 @@ export default function UIOverlay() {
   const returnToVersionSelect = useGameStore((s) => s.returnToVersionSelect)
   const setPlayerIdentity = useGameStore((s) => s.setPlayerIdentity)
   const setMpStatus = useGameStore((s) => s.setMpStatus)
+  const mpOffline = useGameStore((s) => s.mpOffline)
   const selectedVersionId = useGameStore((s) => s.selectedVersionId)
   const setSelectedVersion = useGameStore((s) => s.setSelectedVersion)
   const playerName = useGameStore((s) => s.playerName)
@@ -33,6 +34,7 @@ export default function UIOverlay() {
   const [nick, setNick] = useState('')
   const [nickError, setNickError] = useState('')
   const [joining, setJoining] = useState(false)
+  const [offlineHint, setOfflineHint] = useState('')
 
   const activeVersion =
     getVersionById(selectedVersionId)?.status === 'playable'
@@ -46,6 +48,7 @@ export default function UIOverlay() {
   // Ao voltar do ESC, reaproveita o nick anterior no campo
   useEffect(() => {
     if (!isStarted && playerName) setNick(playerName)
+    if (!isStarted) setOfflineHint('')
   }, [isStarted, playerName])
 
   useEffect(() => {
@@ -84,10 +87,11 @@ export default function UIOverlay() {
     }
     const version = getVersionById(selectedVersionId)
     if (!version || version.status !== 'playable') {
-      setNickError('Selecione uma versão disponível na linha do tempo.')
+      setNickError('Não foi possível entrar. Tente de novo.')
       return
     }
     setNickError('')
+    setOfflineHint('')
     setJoining(true)
 
     try {
@@ -106,11 +110,16 @@ export default function UIOverlay() {
         { name, appearance, outfit, scale },
         version.roomCode
       )
-      setMpStatus({ ready: true, offline: !!result?.offline })
+      const wentOffline = !!result?.offline
+      setMpStatus({ ready: true, offline: wentOffline })
+      if (wentOffline) {
+        setOfflineHint('Sem conexão multiplayer — jogando sozinho.')
+      }
       beginPlaying()
     } catch (err) {
       console.warn('[ui] falha ao entrar:', err)
       setNickError('Não foi possível conectar. Tente de novo.')
+      setOfflineHint('Sem conexão multiplayer — jogando sozinho.')
       setMpStatus({ ready: true, offline: true })
     } finally {
       setJoining(false)
@@ -141,8 +150,7 @@ export default function UIOverlay() {
               Meu Museu
             </h1>
             <p className="mb-5 max-w-md px-6 text-sm text-white/70">
-              Escolha uma versão na linha do tempo (cada uma é uma sala online distinta),
-              digite seu nick e compartilhe o QR para convidar.
+              Digite seu nick e compartilhe o QR para convidar amigos à sala.
             </p>
 
             <VersionTimeline selectedId={selectedVersionId} onSelect={setSelectedVersion} />
@@ -207,7 +215,7 @@ export default function UIOverlay() {
         </div>
       )}
 
-      {/* ============ ESC · versoes ============ */}
+      {/* ============ ESC · menu ============ */}
       {isStarted && (
         <button
           type="button"
@@ -217,8 +225,15 @@ export default function UIOverlay() {
           <span className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
             ESC
           </span>
-          Versões
+          Menu
         </button>
+      )}
+
+      {/* ============ AVISO MULTIPLAYER OFFLINE ============ */}
+      {isStarted && (mpOffline || offlineHint) && !selectedArtwork && (
+        <div className="pointer-events-none absolute right-4 top-4 max-w-xs rounded-full bg-amber-950/80 px-4 py-1.5 text-xs text-amber-100/90 backdrop-blur-sm">
+          {offlineHint || 'Sem conexão multiplayer — jogando sozinho.'}
+        </div>
       )}
 
       {/* ============ PROMPT DESKTOP: obra em foco pela mira ============ */}

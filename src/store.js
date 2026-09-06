@@ -206,6 +206,7 @@ export const useGameStore = create((set, get) => ({
       focusedArtwork: null,
       isPointerLocked: false,
       mpReady: false,
+      mpOffline: false,
     })
     skipVersionMenuOnUnlock = false
   },

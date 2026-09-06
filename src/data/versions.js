@@ -1,6 +1,16 @@
 /**
  * Registro de versoes do museu.
  * Cada versao playable usa um roomCode Playroom distinto (trocar versao = trocar de sala).
+ *
+ * --- Apresentacao publica (timeline) ---
+ * So versoes com timelineVisible: true aparecem na régua do menu.
+ * Hoje so a v0 fica visivel (apresentacao gradual).
+ *
+ * Para restaurar a régua completa no futuro:
+ * 1. Defina timelineVisible: true em v1, v2, v3 (e demais).
+ * 2. Quando uma versao estiver pronta, mude status para 'playable'.
+ * 3. VersionTimeline volta a mostrar a faixa horizontal entre os pontos.
+ * NAO apague as entradas abaixo — so ajuste as flags.
  */
 
 export const VERSIONS = [
@@ -8,9 +18,10 @@ export const VERSIONS = [
     id: 'v0',
     title: 'Inicial',
     dateLabel: 'Início',
-    blurb: 'Versão inicial: blockout sem paredes/pilares/árvores, NPCs instáveis e multiplayer.',
+    blurb: '',
     roomCode: 'gf-museu-v0',
     status: 'playable', // playable | coming
+    timelineVisible: true,
     flags: { legacyNpcs: true, prototypeScene: true },
   },
   {
@@ -20,6 +31,7 @@ export const VERSIONS = [
     blurb: 'Indisponível por enquanto — em breve.',
     roomCode: 'gf-museu-v1',
     status: 'coming',
+    timelineVisible: false,
     flags: { legacyNpcs: false, prototypeScene: false },
   },
   {
@@ -29,6 +41,7 @@ export const VERSIONS = [
     blurb: 'Próxima atualização — ainda não disponível.',
     roomCode: 'gf-museu-v2',
     status: 'coming',
+    timelineVisible: false,
     flags: {},
   },
   {
@@ -38,11 +51,17 @@ export const VERSIONS = [
     blurb: 'Marcos futuros do projeto.',
     roomCode: 'gf-museu-v3',
     status: 'coming',
+    timelineVisible: false,
     flags: {},
   },
 ]
 
 export const DEFAULT_VERSION_ID = 'v0'
+
+/** Versões exibidas na régua do menu (apresentação). */
+export function getTimelineVersions() {
+  return VERSIONS.filter((v) => v.timelineVisible)
+}
 
 export function getPlayableVersions() {
   return VERSIONS.filter((v) => v.status === 'playable')
