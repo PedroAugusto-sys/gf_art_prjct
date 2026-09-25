@@ -37,12 +37,27 @@ export default function App() {
 
   const communityFrames = hasCommunityGallery
     ? [
+        // Sala principal - paredes leste e oeste
         { id: 'community-1', position: [-13.7, 2.2, 0], rotation: [0, 1.5708, 0], size: [2, 1.5] },
         { id: 'community-2', position: [-13.7, 2.2, 6], rotation: [0, 1.5708, 0], size: [2, 1.5] },
         { id: 'community-3', position: [13.7, 2.2, 0], rotation: [0, -1.5708, 0], size: [2, 1.5] },
         { id: 'community-4', position: [13.7, 2.2, 6], rotation: [0, -1.5708, 0], size: [2, 1.5] },
       ]
     : []
+
+  // Adiciona 4 quadros por sala anexa (2 por parede lateral)
+  const annexCount = useGameStore((s) => s.annexCount)
+  if (hasCommunityGallery && annexCount > 0) {
+    for (let i = 0; i < annexCount; i++) {
+      const annexZ = -19 - (i + 1) * 20 + 10 // Centro da sala anexa
+      communityFrames.push(
+        { id: `annex${i + 1}-1`, position: [-13.7, 2.2, annexZ - 6], rotation: [0, 1.5708, 0], size: [2, 1.5] },
+        { id: `annex${i + 1}-2`, position: [-13.7, 2.2, annexZ], rotation: [0, 1.5708, 0], size: [2, 1.5] },
+        { id: `annex${i + 1}-3`, position: [13.7, 2.2, annexZ - 6], rotation: [0, -1.5708, 0], size: [2, 1.5] },
+        { id: `annex${i + 1}-4`, position: [13.7, 2.2, annexZ], rotation: [0, -1.5708, 0], size: [2, 1.5] }
+      )
+    }
+  }
 
   return (
     <div className="fixed inset-0">
