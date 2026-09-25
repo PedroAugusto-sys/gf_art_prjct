@@ -458,7 +458,7 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
         canStartSpeech(time) &&
         Math.random() < SPEECH_CHANCE
       ) {
-        state.speechText = pickPositiveLine()
+        state.speechText = pickPositiveLine(state.lastArtId)
         state.speechUntil = time + SPEECH_DURATION
         markSpeechStarted(time)
       }
@@ -527,13 +527,15 @@ function HostVisitorNPC({ id, name, appearance, outfit, scale, entrySide, leavin
     <>
       <BlobShadow target={group} />
       <group ref={group} position={spawn} scale={scale}>
-        <VisitorModel
-          appearance={appearance || DEFAULT_APPEARANCE_FALLBACK}
-          outfit={outfit}
-          motion={motion}
-          name={isLegacyNpcs() ? null : name}
-          speech={isLegacyNpcs() ? null : bubble}
-        />
+        <group rotation={[0, Math.PI, 0]}>
+          <VisitorModel
+            appearance={appearance || DEFAULT_APPEARANCE_FALLBACK}
+            outfit={outfit}
+            motion={motion}
+            name={isLegacyNpcs() ? null : name}
+            speech={isLegacyNpcs() ? null : bubble}
+          />
+        </group>
       </group>
     </>
   )
@@ -580,13 +582,15 @@ function RemoteVisitorNPC({ data }) {
     <>
       <BlobShadow target={group} />
       <group ref={group} position={[data.x || 0, 0, data.z || 0]} scale={scale}>
-        <VisitorModel
-          appearance={data.appearance || DEFAULT_APPEARANCE_FALLBACK}
-          outfit={data.outfit || 'shirt'}
-          motion={motion}
-          name={data.name}
-          speech={data.speech || null}
-        />
+        <group rotation={[0, Math.PI, 0]}>
+          <VisitorModel
+            appearance={data.appearance || DEFAULT_APPEARANCE_FALLBACK}
+            outfit={data.outfit || 'shirt'}
+            motion={motion}
+            name={data.name}
+            speech={data.speech || null}
+          />
+        </group>
       </group>
     </>
   )

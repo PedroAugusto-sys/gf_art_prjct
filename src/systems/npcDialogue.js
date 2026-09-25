@@ -2,6 +2,8 @@
  * Frases positivas curtas que os NPCs dizem ao observar obras.
  */
 
+import artworksData from '../data/artworks.json'
+
 const POSITIVE_LINES = [
   'Que obra linda.',
   'Isso me acalmou.',
@@ -20,7 +22,23 @@ const POSITIVE_LINES = [
 let lastGlobalSpeechAt = -999
 const GLOBAL_SPEECH_GAP = 8 // s entre falas de qualquer NPC na cena
 
-export function pickPositiveLine() {
+function getArtworkTitle(artId) {
+  if (!artId) return null
+  const artwork = artworksData.artworks?.find((art) => art.id === artId)
+  return artwork?.title || null
+}
+
+export function pickPositiveLine(artId) {
+  const title = getArtworkTitle(artId)
+  if (title) {
+    const phrases = [
+      `"${title}" me tocou.`,
+      `Adorei "${title}".`,
+      `"${title}" é linda.`,
+      `Que obra especial.`,
+    ]
+    return phrases[Math.floor(Math.random() * phrases.length)]
+  }
   return POSITIVE_LINES[Math.floor(Math.random() * POSITIVE_LINES.length)]
 }
 

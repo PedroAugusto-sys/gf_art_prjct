@@ -48,10 +48,6 @@ export function isMultiplayerOffline() {
   return offline
 }
 
-export function getActiveRoomCode() {
-  return activeRoomCode
-}
-
 export function isRoomHost() {
   if (offline || !connected) return true
   try {
@@ -234,15 +230,6 @@ export function publishNpcs(snapshot) {
     roomSetState('npcs', snapshot, false)
   } catch {
     /* ignore */
-  }
-}
-
-export function getLocalPlayer() {
-  if (!connected || offline) return null
-  try {
-    return myPlayer()
-  } catch {
-    return null
   }
 }
 

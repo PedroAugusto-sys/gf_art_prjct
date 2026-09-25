@@ -28,11 +28,11 @@ export const VERSIONS = [
     id: 'v1',
     title: 'Atual',
     dateLabel: 'Agora',
-    blurb: 'Indisponível por enquanto — em breve.',
+    blurb: '',
     roomCode: 'gf-museu-v1',
-    status: 'coming',
-    timelineVisible: false,
-    flags: { legacyNpcs: false, prototypeScene: false },
+    status: 'playable',
+    timelineVisible: true,
+    flags: { legacyNpcs: false, prototypeScene: false, communityGallery: true },
   },
   {
     id: 'v2',
@@ -56,15 +56,11 @@ export const VERSIONS = [
   },
 ]
 
-export const DEFAULT_VERSION_ID = 'v0'
+export const DEFAULT_VERSION_ID = 'v1'
 
 /** Versões exibidas na régua do menu (apresentação). */
 export function getTimelineVersions() {
   return VERSIONS.filter((v) => v.timelineVisible)
-}
-
-export function getPlayableVersions() {
-  return VERSIONS.filter((v) => v.status === 'playable')
 }
 
 export function getVersionById(id) {
