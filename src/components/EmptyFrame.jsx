@@ -104,21 +104,33 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
       return
     }
     
-    const loader = new THREE.TextureLoader()
-    loader.load(
-      artwork.dataUrl,
-      (texture) => {
-        texture.colorSpace = THREE.SRGBColorSpace
-        texture.minFilter = THREE.LinearFilter
-        texture.magFilter = THREE.LinearFilter
-        setArtworkTexture(texture)
-      },
-      undefined,
-      (err) => {
-        console.error('Error loading artwork texture:', err)
-        setArtworkTexture(null)
+    // Carrega data URL como textura usando Image
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    
+    img.onload = () => {
+      const texture = new THREE.Texture(img)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.needsUpdate = true
+      setArtworkTexture(texture)
+    }
+    
+    img.onerror = (err) => {
+      console.error('Error loading artwork texture:', err)
+      setArtworkTexture(null)
+    }
+    
+    img.src = artwork.dataUrl
+    
+    // Cleanup
+    return () => {
+      if (img) {
+        img.onload = null
+        img.onerror = null
       }
-    )
+    }
   }, [artwork?.dataUrl])
 
   const handleInteract = () => {
