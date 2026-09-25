@@ -5,6 +5,7 @@ import * as THREE from 'three'
 
 import { useGameStore } from '../store'
 import Vegetation from './Vegetation'
+import AnnexRoom from './AnnexRoom'
 import { createWallTexture, createWoodTexture } from '../systems/sceneTextures'
 import {
   ROOM,
@@ -34,7 +35,9 @@ import {
 export default function MuseumEnvironment() {
   const isMobile = useGameStore((s) => s.isMobile)
   const getVersionFlags = useGameStore((s) => s.getVersionFlags)
+  const annexCount = useGameStore((s) => s.annexCount)
   const isLegacy = getVersionFlags()?.legacyNpcs ?? true
+  const hasCommunityGallery = getVersionFlags()?.communityGallery ?? false
 
   const materials = useMemo(
     () => {
@@ -333,6 +336,12 @@ export default function MuseumEnvironment() {
         shrubs={INDOOR_VEGETATION.shrubs}
         useTextures={!isLegacy}
       />
+
+      {/* ============ SALAS ANEXAS (v1 apenas) ============ */}
+      {hasCommunityGallery &&
+        Array.from({ length: annexCount }, (_, i) => (
+          <AnnexRoom key={`annex-${i}`} annexIndex={i + 1} materials={materials} />
+        ))}
     </group>
   )
 }
