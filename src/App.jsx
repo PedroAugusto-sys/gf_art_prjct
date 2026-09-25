@@ -15,6 +15,7 @@ import Parking from './components/Parking'
 import UIOverlay from './components/UIOverlay'
 import ArtworkFocus from './components/ArtworkFocus'
 import RemotePlayers from './components/RemotePlayers'
+import { GallerySync } from './components/GallerySync'
 import artworksData from './data/artworks.json'
 import { HALF_D } from './data/museumLayout'
 import { getVersionById } from './data/versions'
@@ -98,6 +99,7 @@ export default function App() {
       </Canvas>
 
       <UIOverlay />
+      <GallerySync />
     </div>
   )
 }

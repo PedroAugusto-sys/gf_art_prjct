@@ -247,9 +247,36 @@ export function publishGalleryState(gallery) {
 export function subscribeGalleryState(callback) {
   if (!connected || offline) return () => {}
   try {
-    return roomGetState('gallery', callback)
+    const unsubscribe = onPlayerJoin((state) => {
+      // Quando o estado mudar, notifica o callback
+      try {
+        const gallery = roomGetState('gallery')
+        if (gallery) callback(gallery)
+      } catch {
+        /* ignore */
+      }
+    })
+    
+    // Carrega estado inicial imediatamente
+    try {
+      const gallery = roomGetState('gallery')
+      if (gallery) callback(gallery)
+    } catch {
+      /* ignore */
+    }
+    
+    return unsubscribe
   } catch {
     return () => {}
+  }
+}
+
+export function getInitialGalleryState() {
+  if (!connected || offline) return null
+  try {
+    return roomGetState('gallery') || null
+  } catch {
+    return null
   }
 }
 
