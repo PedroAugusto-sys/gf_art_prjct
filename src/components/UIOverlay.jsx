@@ -17,6 +17,7 @@ export default function UIOverlay() {
   const selectedArtwork = useGameStore((s) => s.selectedArtwork)
   const focusedArtwork = useGameStore((s) => s.focusedArtwork)
   const isPointerLocked = useGameStore((s) => s.isPointerLocked)
+  const cameraMode = useGameStore((s) => s.cameraMode)
   const beginPlaying = useGameStore((s) => s.beginPlaying)
   const closeArtwork = useGameStore((s) => s.closeArtwork)
   const lockPointer = useGameStore((s) => s.lockPointer)
@@ -241,6 +242,16 @@ export default function UIOverlay() {
           </span>
           Menu
         </button>
+      )}
+
+      {/* ============ HINT CAMERA TOGGLE (desktop) ============ */}
+      {isStarted && !selectedArtwork && !isMobile && (
+        <div className="pointer-events-none absolute left-4 top-16 flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 text-xs text-white/70 backdrop-blur-sm">
+          <span className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
+            V
+          </span>
+          {cameraMode === 'first' ? '3ª pessoa' : '1ª pessoa'}
+        </div>
       )}
 
       {/* ============ AVISO MULTIPLAYER OFFLINE ============ */}

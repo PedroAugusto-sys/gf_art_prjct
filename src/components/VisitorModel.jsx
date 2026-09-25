@@ -58,7 +58,7 @@ export function BlobShadow({ target }) {
   return <mesh ref={meshRef} geometry={blobGeo} material={blobMat} renderOrder={1} />
 }
 
-function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion, headPitch = 0 }) {
+function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion, headPitch = 0, hideHead = false }) {
   const torso = useRef(null)
   const head = useRef(null)
   const leftLeg = useRef(null)
@@ -132,10 +132,12 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
         <mesh geometry={GEO.joint} material={mats.shirt} position={[-0.19, 1.44, 0]} />
         <mesh geometry={GEO.joint} material={mats.shirt} position={[0.19, 1.44, 0]} />
         <mesh geometry={GEO.neck} material={mats.skin} position={[0, 1.55, 0]} />
-        <group ref={head} position={[0, 1.68, 0]}>
-          <mesh geometry={GEO.head} material={mats.skin} />
-          <mesh geometry={GEO.hair} material={mats.hair} position={[0, 0.012, 0]} />
-        </group>
+        {!hideHead && (
+          <group ref={head} position={[0, 1.68, 0]}>
+            <mesh geometry={GEO.head} material={mats.skin} />
+            <mesh geometry={GEO.hair} material={mats.hair} position={[0, 0.012, 0]} />
+          </group>
+        )}
         <group ref={leftArm} position={[-0.21, 1.43, 0]}>
           <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
           <group ref={leftElbow} position={[0, -0.25, 0]}>
@@ -177,6 +179,7 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
  *   speech?: string | null,
  *   viewingArt?: boolean,
  *   headPitch?: number,
+ *   hideHead?: boolean,
  * }} props
  */
 export default function VisitorModel({
@@ -187,6 +190,7 @@ export default function VisitorModel({
   speech,
   viewingArt = false,
   headPitch = 0,
+  hideHead = false,
 }) {
   return (
     <group>
@@ -195,6 +199,7 @@ export default function VisitorModel({
         outfit={outfit}
         motion={motion}
         headPitch={headPitch}
+        hideHead={hideHead}
       />
       {(name || speech) && (
         <Html

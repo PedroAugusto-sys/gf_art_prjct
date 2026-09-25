@@ -279,6 +279,14 @@ export const useGameStore = create((set, get) => ({
     return v?.flags || {}
   },
 
+  // ---------- Camera mode ----------
+  // 'first' = primeira pessoa (padrao), 'third' = terceira pessoa com corpo completo
+  cameraMode: 'first',
+  toggleCameraMode: () => {
+    const current = get().cameraMode
+    set({ cameraMode: current === 'first' ? 'third' : 'first' })
+  },
+
   // ---------- Entrada transitoria (NAO assinar em componentes de UI) ----------
   // movement: vetor normalizado do joystick virtual (mobile). x = strafe, y = frente/tras.
   // Range aproximado [-1, 1]. No desktop permanece {0,0} (WASD e lido direto no Player).
