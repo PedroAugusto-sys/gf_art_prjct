@@ -73,6 +73,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const [uploading, setUploading] = useState(false)
   const [title, setTitle] = useState('')
   const [uploadError, setUploadError] = useState('')
+  const [showTitle, setShowTitle] = useState(false)
   const meshRef = useRef(null)
   const matRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -83,6 +84,8 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const annexCount = useGameStore((s) => s.annexCount)
   const playerName = useGameStore((s) => s.playerName)
   const unlockPointer = useGameStore((s) => s.unlockPointer)
+  const lockPointer = useGameStore((s) => s.lockPointer)
+  const isMobile = useGameStore((s) => s.isMobile)
 
   const [width, height] = size
   const FRAME_DEPTH = 0.08
@@ -99,6 +102,15 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     setShowUploadUI(true)
   }
 
+  const closeModal = () => {
+    setShowUploadUI(false)
+    setTitle('')
+    setUploadError('')
+    if (!isMobile) {
+      lockPointer()
+    }
+  }
+
   const isNear = useEmptyFrameInteraction(meshRef, frameId, handleInteract)
 
   useFrame(() => {
@@ -113,9 +125,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     if (!showUploadUI) return
     const handleKey = (e) => {
       if (e.key === 'Escape') {
-        setShowUploadUI(false)
-        setTitle('')
-        setUploadError('')
+        closeModal()
       }
     }
     window.addEventListener('keydown', handleKey)
@@ -181,8 +191,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         artworks: updatedArtworks,
       })
 
-      setShowUploadUI(false)
-      setTitle('')
+      closeModal()
       setUploading(false)
     } catch (err) {
       // Log apenas se for um erro real de processamento (não de rede/offline)
@@ -198,6 +207,18 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     color: '#2b2b2b',
     roughness: 0.5,
     metalness: 0.3,
+  })
+
+  // Proximity check para mostrar título
+  useFrame(({ camera }) => {
+    if (!meshRef.current || !artwork) {
+      setShowTitle(false)
+      return
+    }
+    const frameWorldPos = new THREE.Vector3()
+    meshRef.current.getWorldPosition(frameWorldPos)
+    const distance = camera.position.distanceTo(frameWorldPos)
+    setShowTitle(distance < 4) // Mostra título quando < 4m
   })
 
   return (
@@ -276,7 +297,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
       )}
 
       {showUploadUI && (
-        <Html center distanceFactor={5}>
+        <Html center distanceFactor={5} style={{ pointerEvents: 'auto' }}>
           <div
             style={{
               background: 'rgba(20,20,20,0.95)',
@@ -367,11 +388,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
                 {uploading ? 'Processando...' : 'Escolher imagem'}
               </button>
               <button
-                onClick={() => {
-                  setShowUploadUI(false)
-                  setTitle('')
-                  setUploadError('')
-                }}
+                onClick={closeModal}
                 disabled={uploading}
                 style={{
                   padding: '10px 16px',
@@ -403,7 +420,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         </Html>
       )}
 
-      {artwork && (
+      {artwork && showTitle && (
         <Html position={[0, -height / 2 - 0.3, FRAME_DEPTH]} center distanceFactor={10}>
           <div
             style={{

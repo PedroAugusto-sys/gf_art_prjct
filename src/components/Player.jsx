@@ -10,14 +10,14 @@ import VisitorModel from './VisitorModel'
 
 // ---------- Constantes de locomocao ----------
 const WALK_SPEED = 5 // metros/segundo
-const EYE_HEIGHT = 0.8 // deslocamento da camera acima do centro da capsula
+const EYE_HEIGHT = 1.7 // altura dos olhos acima do chao (capsule center em y=0.6 + 1.1 offset)
 const LOOK_SENSITIVITY = 0.0025 // sensibilidade do arraste (mobile)
 const PITCH_LIMIT = Math.PI / 2 - 0.1 // trava o olhar para cima/baixo
 
 // Camera em terceira pessoa
-const THIRD_PERSON_DISTANCE = 4.5 // distancia atras do jogador
-const THIRD_PERSON_HEIGHT = 1.8 // altura acima do solo
-const THIRD_PERSON_LERP = 0.12 // suavizacao da camera
+const THIRD_PERSON_DISTANCE = 4.0 // distancia atras do jogador
+const THIRD_PERSON_HEIGHT = 1.5 // altura da camera acima do chao
+const THIRD_PERSON_LERP = 0.15 // suavizacao da camera
 
 // ---------- Limites do mundo (fora daqui e vazio infinito) ----------
 // A sala tem 28 x 38; acrescentamos margem para o jardim/estacionamento externos.
@@ -32,6 +32,7 @@ const worldUp = new THREE.Vector3(0, 1, 0)
 const camEuler = new THREE.Euler()
 const thirdPersonTarget = new THREE.Vector3() // posicao alvo da camera em 3rd person
 const thirdPersonOffset = new THREE.Vector3() // offset relativo ao jogador
+const thirdPersonLookAt = new THREE.Vector3() // ponto onde a camera olha
 
 /**
  * Player: corpo fisico em primeira pessoa.
@@ -53,6 +54,7 @@ export default function Player({ position = [0, 2, 12] }) {
   const controlsRef = useRef(null)
   const visitorMotionRef = useRef({ walking: false, viewing: false })
   const visitorGroupRef = useRef(null)
+  const headLookRef = useRef({ pitch: 0, yaw: 0 })
   const { camera, gl } = useThree()
 
   const isMobile = useGameStore((s) => s.isMobile)
@@ -213,6 +215,7 @@ export default function Player({ position = [0, 2, 12] }) {
 
     // Camera: primeira pessoa (altura dos olhos) ou terceira pessoa (chase cam)
     if (mode === 'first') {
+      // Primeira pessoa: camera na altura dos olhos
       camera.position.set(t.x, t.y + EYE_HEIGHT, t.z)
     } else {
       // Terceira pessoa: posiciona atras do jogador e olha para ele
@@ -234,12 +237,12 @@ export default function Player({ position = [0, 2, 12] }) {
         t.z - thirdPersonOffset.z
       )
       
-      // Lerp suave para a posicao alvo (posicao da camera, nao rotacao)
+      // Lerp suave para a posicao alvo
       camera.position.lerp(thirdPersonTarget, THIRD_PERSON_LERP)
       
       // Camera olha para o jogador (altura do torso)
-      const lookTarget = new THREE.Vector3(t.x, t.y + 1.3, t.z)
-      camera.lookAt(lookTarget)
+      thirdPersonLookAt.set(t.x, t.y + 1.3, t.z)
+      camera.lookAt(thirdPersonLookAt)
     }
 
     // Sync pose mesmo quando pausado (outros veem o avatar parado)
@@ -273,6 +276,13 @@ export default function Player({ position = [0, 2, 12] }) {
         pitch.current = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch.current))
       }
       camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ')
+      headLookRef.current.pitch = pitch.current
+      headLookRef.current.yaw = yaw.current
+    } else {
+      // Desktop: extrai look da camera
+      camEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+      headLookRef.current.pitch = camEuler.x
+      headLookRef.current.yaw = camEuler.y
     }
 
     // 3) Se pausado (modal / nao iniciado) ou mouse livre no desktop: zera o plano XZ
@@ -359,6 +369,7 @@ export default function Player({ position = [0, 2, 12] }) {
               scale={playerScale}
               motion={visitorMotionRef}
               hideHead={cameraMode === 'first'}
+              headLook={headLookRef}
             />
           </group>
         )}

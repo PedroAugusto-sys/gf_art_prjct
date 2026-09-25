@@ -58,7 +58,7 @@ export function BlobShadow({ target }) {
   return <mesh ref={meshRef} geometry={blobGeo} material={blobMat} renderOrder={1} />
 }
 
-function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion, headPitch = 0, hideHead = false }) {
+function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion, headPitch = 0, hideHead = false, headLook }) {
   const torso = useRef(null)
   const head = useRef(null)
   const leftLeg = useRef(null)
@@ -100,21 +100,29 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
     // Joelhos: dobram quando a perna vai para frente (flexão natural)
     if (leftKnee.current) leftKnee.current.rotation.x = Math.max(0, Math.sin(p)) * (walking ? 1.0 : 0.08)
     if (rightKnee.current) rightKnee.current.rotation.x = Math.max(0, -Math.sin(p)) * (walking ? 1.0 : 0.08)
-    // Braços: movimento oposto às pernas (braço esquerdo para frente quando perna direita para frente)
-    if (leftArm.current) leftArm.current.rotation.x = -swing * 0.7
-    if (rightArm.current) rightArm.current.rotation.x = swing * 0.7
+    // Braços: movimento oposto às pernas (braço direito para frente quando perna esquerda para frente)
+    if (leftArm.current) leftArm.current.rotation.x = swing * 0.7
+    if (rightArm.current) rightArm.current.rotation.x = -swing * 0.7
     const eb = walking ? 0.35 : 0.2
-    if (leftElbow.current) leftElbow.current.rotation.x = eb + Math.max(0, -swing) * 0.4
-    if (rightElbow.current) rightElbow.current.rotation.x = eb + Math.max(0, swing) * 0.4
+    if (leftElbow.current) leftElbow.current.rotation.x = eb + Math.max(0, swing) * 0.4
+    if (rightElbow.current) rightElbow.current.rotation.x = eb + Math.max(0, -swing) * 0.4
 
     if (torso.current) {
       torso.current.position.y = bob
       torso.current.rotation.z = viewing ? Math.sin(time * 0.6) * 0.03 : 0
     }
     if (head.current) {
-      head.current.rotation.y = viewing ? Math.sin(time * 0.45) * 0.34 : 0
-      head.current.rotation.x =
-        (viewing ? Math.sin(time * 0.3) * 0.08 : 0) + headPitch * 0.35
+      // Se headLook está disponível (jogador local), usa o look da câmera
+      if (headLook?.current) {
+        const MAX_HEAD_YAW = 0.6
+        const MAX_HEAD_PITCH = 0.5
+        head.current.rotation.y = Math.max(-MAX_HEAD_YAW, Math.min(MAX_HEAD_YAW, headLook.current.yaw))
+        head.current.rotation.x = Math.max(-MAX_HEAD_PITCH, Math.min(MAX_HEAD_PITCH, headLook.current.pitch))
+      } else {
+        // Caso contrário, usa a animação padrão de viewing
+        head.current.rotation.y = viewing ? Math.sin(time * 0.45) * 0.34 : 0
+        head.current.rotation.x = (viewing ? Math.sin(time * 0.3) * 0.08 : 0) + headPitch * 0.35
+      }
     }
   })
 
@@ -180,6 +188,7 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
  *   viewingArt?: boolean,
  *   headPitch?: number,
  *   hideHead?: boolean,
+ *   headLook?: React.MutableRefObject<{ pitch: number, yaw: number }>,
  * }} props
  */
 export default function VisitorModel({
@@ -191,6 +200,7 @@ export default function VisitorModel({
   viewingArt = false,
   headPitch = 0,
   hideHead = false,
+  headLook,
 }) {
   return (
     <group>
@@ -200,6 +210,7 @@ export default function VisitorModel({
         motion={motion}
         headPitch={headPitch}
         hideHead={hideHead}
+        headLook={headLook}
       />
       {(name || speech) && (
         <Html
