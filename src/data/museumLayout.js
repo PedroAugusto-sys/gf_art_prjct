@@ -18,6 +18,21 @@ export const ROOM = {
 export const HALF_W = ROOM.width / 2
 export const HALF_D = ROOM.depth / 2
 
+// ---------- Salas anexas (max 2) ----------
+export const ANNEX_DEPTH = 20 // profundidade de cada sala anexa
+export const ANNEX_CORRIDOR_WIDTH = 4 // largura do corredor central
+
+export function getAnnexRoomBounds(annexIndex) {
+  const baseZ = -HALF_D - annexIndex * ANNEX_DEPTH
+  return {
+    minX: -HALF_W,
+    maxX: HALF_W,
+    minZ: baseZ - ANNEX_DEPTH,
+    maxZ: baseZ,
+    centerZ: baseZ - ANNEX_DEPTH / 2,
+  }
+}
+
 // ---------- Estrutura ----------
 export const PILLAR_POSITIONS = [
   [-9, -12], [-9, -4], [-9, 4], [-9, 12],
@@ -142,50 +157,6 @@ export const IDLE_SPOTS = [
   [-7, 0], [7, 0], [-7, 10], [7, -10],
   [0, 6], [0, -3], [-11, 8], [11, -3],
   [-7, -16], [7, 16],
-]
-
-// ---------- Elenco de visitantes ----------
-export const NPC_ROSTER = [
-  {
-    id: 'npc-1', position: [-7, 0, 14], scale: 1.0, outfit: 'shirt',
-    appearance: { skin: '#c4a484', hair: '#2c1b10', shirt: '#4a6fa5', pants: '#3a3f4a', shoes: '#1f1f1f' },
-  },
-  {
-    id: 'npc-2', position: [7, 0, 14], scale: 0.94, outfit: 'dress',
-    appearance: { skin: '#8d5a3b', hair: '#151515', shirt: '#a8574a', pants: '#a8574a', shoes: '#2b2420' },
-  },
-  {
-    id: 'npc-3', position: [-7, 0, -14], scale: 1.03, outfit: 'coat',
-    appearance: { skin: '#e0bb96', hair: '#6b4423', shirt: '#5c6b4a', pants: '#2f3340', shoes: '#222222' },
-  },
-  {
-    id: 'npc-4', position: [7, 0, -14], scale: 0.97, outfit: 'shirt',
-    appearance: { skin: '#a9714b', hair: '#241a12', shirt: '#d8cfc0', pants: '#44506b', shoes: '#1a1a1a' },
-  },
-  {
-    id: 'npc-5', position: [-11, 0, 0], scale: 1.05, outfit: 'shirt',
-    appearance: { skin: '#f0d0b0', hair: '#8a6a3f', shirt: '#7a5c8f', pants: '#33383f', shoes: '#2b2b2b' },
-  },
-  {
-    id: 'npc-6', position: [11, 0, 0], scale: 0.92, outfit: 'dress',
-    appearance: { skin: '#6f4526', hair: '#101010', shirt: '#4f8073', pants: '#4f8073', shoes: '#26201c' },
-  },
-  {
-    id: 'npc-7', position: [-2, 0, 10], scale: 1.0, outfit: 'coat',
-    appearance: { skin: '#d2a679', hair: '#3d2b1f', shirt: '#2f4858', pants: '#3b3b42', shoes: '#191919' },
-  },
-  {
-    id: 'npc-8', position: [2, 0, -2], scale: 0.99, outfit: 'shirt',
-    appearance: { skin: '#bb8a63', hair: '#4a3520', shirt: '#c2703d', pants: '#3f4550', shoes: '#232323' },
-  },
-  {
-    id: 'npc-9', position: [-6, 0, 0], scale: 1.02, outfit: 'shirt',
-    appearance: { skin: '#9c6a45', hair: '#1c1c1c', shirt: '#5b6c8c', pants: '#2c2f36', shoes: '#1d1d1d' },
-  },
-  {
-    id: 'npc-10', position: [6, 0, -12], scale: 0.95, outfit: 'dress',
-    appearance: { skin: '#e6c6a2', hair: '#a06a35', shirt: '#8c6f9e', pants: '#8c6f9e', shoes: '#2a2a2a' },
-  },
 ]
 
 // ---------- Vegetacao (gerada de forma deterministica) ----------

@@ -5,6 +5,8 @@ import * as THREE from 'three'
 
 import { useGameStore } from '../store'
 import Vegetation from './Vegetation'
+import AnnexRoom from './AnnexRoom'
+import { createWallTexture, createWoodTexture } from '../systems/sceneTextures'
 import {
   ROOM,
   HALF_W,
@@ -32,34 +34,51 @@ import {
  */
 export default function MuseumEnvironment() {
   const isMobile = useGameStore((s) => s.isMobile)
+  const getVersionFlags = useGameStore((s) => s.getVersionFlags)
+  const annexCount = useGameStore((s) => s.annexCount)
+  const isLegacy = getVersionFlags()?.legacyNpcs ?? true
+  const hasCommunityGallery = getVersionFlags()?.communityGallery ?? false
 
   const materials = useMemo(
-    () => ({
-      floor: new THREE.MeshStandardMaterial({ color: '#d9d4cc', roughness: 0.85, metalness: 0.05 }),
-      wall: new THREE.MeshStandardMaterial({ color: '#f2efe9', roughness: 0.95 }),
-      ceiling: new THREE.MeshStandardMaterial({ color: '#e8e5df', roughness: 1 }),
-      skylight: new THREE.MeshStandardMaterial({
-        color: '#ffffff',
-        emissive: '#fff8ec',
-        emissiveIntensity: 0.9,
-        roughness: 1,
-      }),
-      pillar: new THREE.MeshStandardMaterial({ color: '#efeae1', roughness: 0.7 }),
-      benchWood: new THREE.MeshStandardMaterial({ color: '#5a4634', roughness: 0.6 }),
-      bedRim: new THREE.MeshStandardMaterial({ color: '#cfc7b8', roughness: 0.9 }),
-      grass: new THREE.MeshStandardMaterial({ color: '#5f8a4a', roughness: 1 }),
-      glass: new THREE.MeshStandardMaterial({
-        color: '#dcebf2',
-        roughness: 0.08,
-        metalness: 0.1,
-        transparent: true,
-        opacity: 0.18,
-        side: THREE.DoubleSide,
-      }),
-      mullion: new THREE.MeshStandardMaterial({ color: '#3a3d40', roughness: 0.5, metalness: 0.4 }),
-      lawn: new THREE.MeshStandardMaterial({ color: '#6f9a52', roughness: 1 }),
-    }),
-    []
+    () => {
+      const wallTexture = !isLegacy ? createWallTexture() : null
+      const woodTexture = !isLegacy ? createWoodTexture() : null
+
+      return {
+        floor: new THREE.MeshStandardMaterial({ color: '#d9d4cc', roughness: 0.85, metalness: 0.05 }),
+        wall: new THREE.MeshStandardMaterial({
+          color: '#f2efe9',
+          roughness: 0.95,
+          map: wallTexture,
+        }),
+        ceiling: new THREE.MeshStandardMaterial({ color: '#e8e5df', roughness: 1 }),
+        skylight: new THREE.MeshStandardMaterial({
+          color: '#ffffff',
+          emissive: '#fff8ec',
+          emissiveIntensity: 0.9,
+          roughness: 1,
+        }),
+        pillar: new THREE.MeshStandardMaterial({ color: '#efeae1', roughness: 0.7 }),
+        benchWood: new THREE.MeshStandardMaterial({
+          color: '#5a4634',
+          roughness: 0.6,
+          map: woodTexture,
+        }),
+        bedRim: new THREE.MeshStandardMaterial({ color: '#cfc7b8', roughness: 0.9 }),
+        grass: new THREE.MeshStandardMaterial({ color: '#5f8a4a', roughness: 1 }),
+        glass: new THREE.MeshStandardMaterial({
+          color: '#dcebf2',
+          roughness: 0.08,
+          metalness: 0.1,
+          transparent: true,
+          opacity: 0.18,
+          side: THREE.DoubleSide,
+        }),
+        mullion: new THREE.MeshStandardMaterial({ color: '#3a3d40', roughness: 0.5, metalness: 0.4 }),
+        lawn: new THREE.MeshStandardMaterial({ color: '#6f9a52', roughness: 1 }),
+      }
+    },
+    [isLegacy]
   )
 
   const pillarGeo = useMemo(() => new THREE.BoxGeometry(1, ROOM.height, 1), [])
@@ -315,7 +334,14 @@ export default function MuseumEnvironment() {
         trunks={INDOOR_VEGETATION.trunks}
         canopy={INDOOR_VEGETATION.canopy}
         shrubs={INDOOR_VEGETATION.shrubs}
+        useTextures={!isLegacy}
       />
+
+      {/* ============ SALAS ANEXAS (v1 apenas) ============ */}
+      {hasCommunityGallery &&
+        Array.from({ length: annexCount }, (_, i) => (
+          <AnnexRoom key={`annex-${i}`} annexIndex={i + 1} materials={materials} />
+        ))}
     </group>
   )
 }

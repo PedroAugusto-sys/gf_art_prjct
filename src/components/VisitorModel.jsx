@@ -58,7 +58,7 @@ export function BlobShadow({ target }) {
   return <mesh ref={meshRef} geometry={blobGeo} material={blobMat} renderOrder={1} />
 }
 
-function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion, headPitch = 0 }) {
+function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion, headPitch = 0, hideHead = false }) {
   const torso = useRef(null)
   const head = useRef(null)
   const leftLeg = useRef(null)
@@ -94,10 +94,13 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
     const swing = Math.sin(p) * (walking ? 0.58 : 0.05)
     const bob = Math.abs(Math.sin(p)) * (walking ? 0.032 : 0.006)
 
+    // Pernas: swing positivo = perna para frente (rotation.x > 0 gira para frente)
     if (leftLeg.current) leftLeg.current.rotation.x = swing
     if (rightLeg.current) rightLeg.current.rotation.x = -swing
-    if (leftKnee.current) leftKnee.current.rotation.x = -Math.max(0, -Math.sin(p)) * (walking ? 1.0 : 0.08)
-    if (rightKnee.current) rightKnee.current.rotation.x = -Math.max(0, Math.sin(p)) * (walking ? 1.0 : 0.08)
+    // Joelhos: dobram quando a perna vai para frente (flexão natural)
+    if (leftKnee.current) leftKnee.current.rotation.x = Math.max(0, Math.sin(p)) * (walking ? 1.0 : 0.08)
+    if (rightKnee.current) rightKnee.current.rotation.x = Math.max(0, -Math.sin(p)) * (walking ? 1.0 : 0.08)
+    // Braços: movimento oposto às pernas (braço esquerdo para frente quando perna direita para frente)
     if (leftArm.current) leftArm.current.rotation.x = -swing * 0.7
     if (rightArm.current) rightArm.current.rotation.x = swing * 0.7
     const eb = walking ? 0.35 : 0.2
@@ -129,10 +132,12 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
         <mesh geometry={GEO.joint} material={mats.shirt} position={[-0.19, 1.44, 0]} />
         <mesh geometry={GEO.joint} material={mats.shirt} position={[0.19, 1.44, 0]} />
         <mesh geometry={GEO.neck} material={mats.skin} position={[0, 1.55, 0]} />
-        <group ref={head} position={[0, 1.68, 0]}>
-          <mesh geometry={GEO.head} material={mats.skin} />
-          <mesh geometry={GEO.hair} material={mats.hair} position={[0, 0.012, 0]} />
-        </group>
+        {!hideHead && (
+          <group ref={head} position={[0, 1.68, 0]}>
+            <mesh geometry={GEO.head} material={mats.skin} />
+            <mesh geometry={GEO.hair} material={mats.hair} position={[0, 0.012, 0]} />
+          </group>
+        )}
         <group ref={leftArm} position={[-0.21, 1.43, 0]}>
           <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
           <group ref={leftElbow} position={[0, -0.25, 0]}>
@@ -174,6 +179,7 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
  *   speech?: string | null,
  *   viewingArt?: boolean,
  *   headPitch?: number,
+ *   hideHead?: boolean,
  * }} props
  */
 export default function VisitorModel({
@@ -184,6 +190,7 @@ export default function VisitorModel({
   speech,
   viewingArt = false,
   headPitch = 0,
+  hideHead = false,
 }) {
   return (
     <group>
@@ -192,6 +199,7 @@ export default function VisitorModel({
         outfit={outfit}
         motion={motion}
         headPitch={headPitch}
+        hideHead={hideHead}
       />
       {(name || speech) && (
         <Html

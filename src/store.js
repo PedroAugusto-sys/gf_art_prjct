@@ -228,6 +228,20 @@ export const useGameStore = create((set, get) => ({
   setMpStatus: ({ ready, offline }) =>
     set({ mpReady: !!ready, mpOffline: !!offline }),
 
+  // ---------- Galeria comunitaria (v1) ----------
+  annexCount: 0,
+  communityArtworks: [],
+  setAnnexCount: (count) => set({ annexCount: Math.max(0, Math.min(2, count)) }),
+  addCommunityArtwork: (artwork) =>
+    set((state) => ({
+      communityArtworks: [...state.communityArtworks, artwork],
+    })),
+  updateCommunityArtwork: (id, artwork) =>
+    set((state) => ({
+      communityArtworks: state.communityArtworks.map((art) => (art.id === id ? artwork : art)),
+    })),
+  setCommunityArtworks: (artworks) => set({ communityArtworks: artworks }),
+
   // ---------- Versao / timeline ----------
   selectedVersionId:
     typeof window !== 'undefined'
@@ -263,6 +277,14 @@ export const useGameStore = create((set, get) => ({
   getVersionFlags: () => {
     const v = resolvePlayableVersion(get().selectedVersionId)
     return v?.flags || {}
+  },
+
+  // ---------- Camera mode ----------
+  // 'first' = primeira pessoa (padrao), 'third' = terceira pessoa com corpo completo
+  cameraMode: 'first',
+  toggleCameraMode: () => {
+    const current = get().cameraMode
+    set({ cameraMode: current === 'first' ? 'third' : 'first' })
   },
 
   // ---------- Entrada transitoria (NAO assinar em componentes de UI) ----------

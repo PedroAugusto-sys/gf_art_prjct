@@ -17,6 +17,8 @@ import {
   myPlayer,
   isHost as playroomIsHost,
   setState as roomSetState,
+  getState as roomGetState,
+  onPlayerJoin,
 } from 'playroomkit'
 import { DEFAULT_VERSION_ID, getVersionById } from '../data/versions'
 
@@ -26,6 +28,7 @@ export const NPC_SNAPSHOT_MS = 180
 
 const INSERT_COIN_TIMEOUT_MS = 12000
 const PLAYROOM_GAME_ID_DOCS = 'https://docs.joinplayroom.com/errors/no-game-id'
+let hasWarnedMissingGameId = false // Avisa apenas uma vez por sessão
 
 let connected = false
 let offline = false
@@ -46,10 +49,6 @@ export function isMultiplayerConnected() {
 
 export function isMultiplayerOffline() {
   return offline
-}
-
-export function getActiveRoomCode() {
-  return activeRoomCode
 }
 
 export function isRoomHost() {
@@ -150,9 +149,11 @@ export async function connectMultiplayer(identity, roomCode) {
   const gameId = import.meta.env.VITE_PLAYROOM_GAME_ID
   if (gameId) {
     opts.gameId = gameId
-  } else if (typeof console !== 'undefined') {
-    console.warn(
-      `[multiplayer] VITE_PLAYROOM_GAME_ID nao definido. Playroom pode limitar DAU. Veja ${PLAYROOM_GAME_ID_DOCS}`
+  } else if (!hasWarnedMissingGameId && typeof console !== 'undefined') {
+    // Avisa apenas uma vez por sessão (não spam a cada entrada)
+    hasWarnedMissingGameId = true
+    console.info(
+      `[multiplayer] Playroom configurado sem Game ID (limite de DAU aplicado). Configure VITE_PLAYROOM_GAME_ID para produção. Veja .env.example`
     )
   }
 
@@ -177,7 +178,10 @@ export async function connectMultiplayer(identity, roomCode) {
     }
     return { ok: true, offline: false, roomCode: code }
   } catch (err) {
-    console.warn('[multiplayer] Playroom indisponível, modo offline:', err)
+    // Modo offline silencioso - apenas um log discreto
+    if (typeof console !== 'undefined' && !hasWarnedMissingGameId) {
+      console.info('[multiplayer] Modo offline (Playroom indisponível)')
+    }
     connected = false
     offline = true
     activeRoomCode = code
@@ -206,7 +210,7 @@ export function publishIdentity(identity) {
     me.setState('outfit', identity.outfit, true)
     me.setState('scale', identity.scale, true)
   } catch (e) {
-    console.warn('[multiplayer] falha ao publicar identidade', e)
+    // Falha silenciosa - modo offline ou estado não disponível
   }
 }
 
@@ -237,10 +241,46 @@ export function publishNpcs(snapshot) {
   }
 }
 
-export function getLocalPlayer() {
+export function publishGalleryState(gallery) {
+  if (!connected || offline) return
+  try {
+    roomSetState('gallery', gallery, true)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function subscribeGalleryState(callback) {
+  if (!connected || offline) return () => {}
+  try {
+    const unsubscribe = onPlayerJoin((state) => {
+      // Quando o estado mudar, notifica o callback
+      try {
+        const gallery = roomGetState('gallery')
+        if (gallery) callback(gallery)
+      } catch {
+        /* ignore */
+      }
+    })
+    
+    // Carrega estado inicial imediatamente
+    try {
+      const gallery = roomGetState('gallery')
+      if (gallery) callback(gallery)
+    } catch {
+      /* ignore */
+    }
+    
+    return unsubscribe
+  } catch {
+    return () => {}
+  }
+}
+
+export function getInitialGalleryState() {
   if (!connected || offline) return null
   try {
-    return myPlayer()
+    return roomGetState('gallery') || null
   } catch {
     return null
   }

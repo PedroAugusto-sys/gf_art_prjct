@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { Instances, Instance } from '@react-three/drei'
 import * as THREE from 'three'
 
+import { createBarkTexture, createLeafTexture } from '../systems/sceneTextures'
+
 /**
  * Vegetacao low-poly desenhada com instancing: todos os troncos saem em uma
  * draw call, todas as copas em outra, todos os arbustos em uma terceira.
@@ -17,14 +19,33 @@ const trunkGeometry = new THREE.CylinderGeometry(0.055, 0.09, 1, 7)
 const canopyGeometry = new THREE.IcosahedronGeometry(1, 1)
 const shrubGeometry = new THREE.IcosahedronGeometry(1, 1)
 
-export default function Vegetation({ trunks, canopy, shrubs, castShadow = true }) {
+export default function Vegetation({ trunks, canopy, shrubs, castShadow = true, useTextures = false }) {
   const materials = useMemo(
-    () => ({
-      trunk: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.9 }),
-      canopy: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85, flatShading: true }),
-      shrub: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.85, flatShading: true }),
-    }),
-    []
+    () => {
+      const barkTexture = useTextures ? createBarkTexture() : null
+      const leafTexture = useTextures ? createLeafTexture() : null
+
+      return {
+        trunk: new THREE.MeshStandardMaterial({
+          color: '#ffffff',
+          roughness: 0.9,
+          map: barkTexture,
+        }),
+        canopy: new THREE.MeshStandardMaterial({
+          color: '#ffffff',
+          roughness: 0.85,
+          flatShading: true,
+          map: leafTexture,
+        }),
+        shrub: new THREE.MeshStandardMaterial({
+          color: '#ffffff',
+          roughness: 0.85,
+          flatShading: true,
+          map: leafTexture,
+        }),
+      }
+    },
+    [useTextures]
   )
 
   return (
