@@ -4,7 +4,6 @@ import { useGameStore } from '../store'
 import VirtualControls from './VirtualControls'
 import VersionTimeline from './VersionTimeline'
 import InviteQr from './InviteQr'
-import { RoomManagementPanel } from './RoomManagementPanel'
 import { generateAppearance, sanitizeNick } from '../systems/appearance'
 import { connectMultiplayer } from '../systems/multiplayer'
 import { getVersionById } from '../data/versions'
@@ -232,30 +231,16 @@ export default function UIOverlay() {
 
       {/* ============ ESC · menu ============ */}
       {isStarted && (
-        <div className="pointer-events-auto absolute left-4 top-4 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={returnToVersionSelect}
-            className="flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm hover:bg-black/70"
-          >
-            <span className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
-              ESC
-            </span>
-            Menu
-          </button>
-
-          {hasCommunityGallery && (
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm"
-            >
-              <span className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
-                R
-              </span>
-              Salas
-            </button>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={returnToVersionSelect}
+          className="pointer-events-auto absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm hover:bg-black/70"
+        >
+          <span className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
+            ESC
+          </span>
+          Menu
+        </button>
       )}
 
       {/* ============ AVISO MULTIPLAYER OFFLINE ============ */}
@@ -379,9 +364,6 @@ export default function UIOverlay() {
 
       {/* ============ CONTROLES MOBILE ============ */}
       {isMobile && isStarted && !selectedArtwork && <VirtualControls />}
-
-      {/* ============ PAINEL DE GERENCIAMENTO DE SALAS (v1) ============ */}
-      <RoomManagementPanel />
     </div>
   )
 }

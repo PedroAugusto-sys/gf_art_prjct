@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
@@ -6,7 +6,7 @@ import { useGameStore } from '../store'
 import { publishGalleryState, isRoomHost, isMultiplayerOffline } from '../systems/multiplayer'
 
 /**
- * Painel na parede da sala principal para gerenciar salas anexas.
+ * Painel na parede para expandir a galeria (adicionar mais espaço para obras).
  * Clicável quando jogador está próximo.
  */
 export default function WallPanel({ position, rotation }) {
@@ -19,9 +19,12 @@ export default function WallPanel({ position, rotation }) {
   const setAnnexCount = useGameStore((s) => s.setAnnexCount)
   const communityArtworks = useGameStore((s) => s.communityArtworks)
   const unlockPointer = useGameStore((s) => s.unlockPointer)
+  const lockPointer = useGameStore((s) => s.lockPointer)
+  const isMobile = useGameStore((s) => s.isMobile)
 
   const isHost = isRoomHost() || isMultiplayerOffline()
-  const canAddRoom = annexCount < 2 && isHost
+  const canExpand = annexCount < 2 && isHost
+  const maxExpansions = 2
 
   useFrame((state) => {
     if (!meshRef.current) return
@@ -41,8 +44,8 @@ export default function WallPanel({ position, rotation }) {
     setShowUI(true)
   }
 
-  const handleAddRoom = () => {
-    if (!canAddRoom) return
+  const handleExpand = () => {
+    if (!canExpand) return
 
     const newCount = annexCount + 1
     setAnnexCount(newCount)
@@ -51,11 +54,34 @@ export default function WallPanel({ position, rotation }) {
       annexCount: newCount,
       artworks: communityArtworks,
     })
+
+    setShowUI(false)
+    
+    // Re-lock pointer after closing (desktop only)
+    if (!isMobile) {
+      setTimeout(() => lockPointer(), 100)
+    }
   }
 
   const handleClose = () => {
     setShowUI(false)
+    
+    // Re-lock pointer after closing (desktop only)
+    if (!isMobile) {
+      setTimeout(() => lockPointer(), 100)
+    }
   }
+
+  useEffect(() => {
+    if (!showUI) return
+    const handleKey = (e) => {
+      if (e.key === 'Escape') {
+        handleClose()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [showUI])
 
   const panelMaterial = new THREE.MeshStandardMaterial({
     color: hovered ? '#4a4a4a' : '#3a3a3a',
@@ -105,7 +131,7 @@ export default function WallPanel({ position, rotation }) {
             alignItems: 'center',
             justifyContent: 'center',
             color: 'white',
-            fontSize: '12px',
+            fontSize: '11px',
             fontWeight: 600,
             textAlign: 'center',
             gap: '4px',
@@ -115,12 +141,18 @@ export default function WallPanel({ position, rotation }) {
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
             fill="currentColor"
-            style={{ width: '32px', height: '32px', opacity: 0.9 }}
+            style={{ width: '28px', height: '28px', opacity: 0.9 }}
           >
-            <path d="M11.47 3.84a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.06l-8.689-8.69a2.25 2.25 0 00-3.182 0l-8.69 8.69a.75.75 0 001.061 1.06l8.69-8.69z" />
-            <path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.43z" />
+            <path
+              fillRule="evenodd"
+              d="M12 3.75a.75.75 0 01.75.75v6.75h6.75a.75.75 0 010 1.5h-6.75v6.75a.75.75 0 01-1.5 0v-6.75H4.5a.75.75 0 010-1.5h6.75V4.5a.75.75 0 01.75-.75z"
+              clipRule="evenodd"
+            />
           </svg>
-          <div>Salas</div>
+          <div>Expandir</div>
+          <div style={{ fontSize: '9px', opacity: 0.7 }}>
+            {annexCount}/{maxExpansions}
+          </div>
         </div>
       </Html>
 
@@ -139,12 +171,12 @@ export default function WallPanel({ position, rotation }) {
               backdropFilter: 'blur(4px)',
             }}
           >
-            Clique para gerenciar
+            Clique para expandir
           </div>
         </Html>
       )}
 
-      {/* UI de gerenciamento */}
+      {/* UI de confirmação de expansão */}
       {showUI && (
         <Html center distanceFactor={5}>
           <div
@@ -156,68 +188,72 @@ export default function WallPanel({ position, rotation }) {
               width: '320px',
               boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
               backdropFilter: 'blur(8px)',
+              pointerEvents: 'auto',
             }}
           >
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 600 }}>
-              Gerenciar salas
+            <h3 style={{ margin: '0 0 12px 0', fontSize: '18px', fontWeight: 600 }}>
+              Expandir galeria
             </h3>
 
-            <div style={{ marginBottom: '16px' }}>
+            <p
+              style={{
+                margin: '0 0 16px 0',
+                fontSize: '14px',
+                lineHeight: 1.5,
+                opacity: 0.85,
+              }}
+            >
+              Adicionar mais espaço de parede para expor obras da comunidade.
+            </p>
+
+            <div
+              style={{
+                marginBottom: '16px',
+                padding: '12px',
+                background: 'rgba(255,255,255,0.05)',
+                borderRadius: '8px',
+              }}
+            >
               <div
                 style={{
-                  padding: '12px',
-                  background: 'rgba(255,255,255,0.05)',
-                  borderRadius: '8px',
-                  marginBottom: '8px',
+                  fontSize: '12px',
+                  opacity: 0.7,
+                  marginBottom: '4px',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '14px' }}>Sala principal</span>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      color: '#4ade80',
-                      background: 'rgba(74,222,128,0.1)',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                    }}
-                  >
-                    Ativa
-                  </span>
-                </div>
+                Progresso de expansão
               </div>
-
-              {Array.from({ length: annexCount }, (_, i) => (
+              <div
+                style={{
+                  fontSize: '24px',
+                  fontWeight: 700,
+                }}
+              >
+                {annexCount}/{maxExpansions}
+              </div>
+              <div
+                style={{
+                  marginTop: '8px',
+                  height: '4px',
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '2px',
+                  overflow: 'hidden',
+                }}
+              >
                 <div
-                  key={`annex-${i}`}
                   style={{
-                    padding: '12px',
-                    background: 'rgba(255,255,255,0.05)',
-                    borderRadius: '8px',
-                    marginBottom: '8px',
+                    width: `${(annexCount / maxExpansions) * 100}%`,
+                    height: '100%',
+                    background: '#16a34a',
+                    transition: 'width 0.3s ease',
                   }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '14px' }}>Sala anexa {i + 1}</span>
-                    <span
-                      style={{
-                        fontSize: '11px',
-                        color: '#4ade80',
-                        background: 'rgba(74,222,128,0.1)',
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                      }}
-                    >
-                      Ativa
-                    </span>
-                  </div>
-                </div>
-              ))}
+                />
+              </div>
             </div>
 
-            {canAddRoom && (
+            {canExpand ? (
               <button
-                onClick={handleAddRoom}
+                onClick={handleExpand}
                 style={{
                   width: '100%',
                   padding: '12px',
@@ -247,36 +283,24 @@ export default function WallPanel({ position, rotation }) {
                     clipRule="evenodd"
                   />
                 </svg>
-                Adicionar nova sala ({annexCount}/2)
+                Expandir agora
               </button>
-            )}
-
-            {!isHost && (
+            ) : (
               <div
                 style={{
-                  fontSize: '12px',
-                  color: 'rgba(255,255,255,0.6)',
                   marginBottom: '12px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  background: annexCount >= maxExpansions ? 'rgba(251,191,36,0.1)' : 'rgba(239,68,68,0.1)',
+                  border: `1px solid ${annexCount >= maxExpansions ? 'rgba(251,191,36,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                  fontSize: '13px',
                   textAlign: 'center',
+                  color: annexCount >= maxExpansions ? '#fbbf24' : '#fca5a5',
                 }}
               >
-                Apenas o anfitrião pode criar novas salas
-              </div>
-            )}
-
-            {annexCount >= 2 && (
-              <div
-                style={{
-                  fontSize: '12px',
-                  color: '#fbbf24',
-                  marginBottom: '12px',
-                  textAlign: 'center',
-                  background: 'rgba(251,191,36,0.1)',
-                  padding: '8px',
-                  borderRadius: '6px',
-                }}
-              >
-                Limite máximo de salas atingido
+                {annexCount >= maxExpansions
+                  ? 'Galeria totalmente expandida'
+                  : 'Só o anfitrião pode expandir'}
               </div>
             )}
 
@@ -296,17 +320,6 @@ export default function WallPanel({ position, rotation }) {
             >
               Fechar
             </button>
-
-            <div
-              style={{
-                marginTop: '12px',
-                fontSize: '11px',
-                opacity: 0.5,
-                textAlign: 'center',
-              }}
-            >
-              Atalho: pressione R
-            </div>
           </div>
         </Html>
       )}

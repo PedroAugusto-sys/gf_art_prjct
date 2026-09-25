@@ -119,7 +119,7 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
     speechCooldownUntil: 0,
     speechArmedAt: 0,
   })
-  const yaw = useRef(Math.PI)
+  const yaw = useRef(0) // Modelo aponta para +Z quando yaw=0
   const separation = useRef({ x: 0, z: 0 })
 
   useEffect(() => () => removeAgent(npcId), [npcId])
@@ -252,7 +252,8 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
       position.z += WALK_SPEED * dt
       motion.current.walking = true
       motion.current.viewing = false
-      group.rotation.y = 0 // de costas para o museu
+      // NPC sai andando para +Z (norte), então yaw deve ser 0 (modelo aponta para +Z)
+      group.rotation.y = 0
       updateAgent(npcId, position.x, position.z)
       if (position.z > EXIT_DESPAWN_Z) onReachedExit()
       return
@@ -527,15 +528,13 @@ function HostVisitorNPC({ id, name, appearance, outfit, scale, entrySide, leavin
     <>
       <BlobShadow target={group} />
       <group ref={group} position={spawn} scale={scale}>
-        <group rotation={[0, Math.PI, 0]}>
-          <VisitorModel
-            appearance={appearance || DEFAULT_APPEARANCE_FALLBACK}
-            outfit={outfit}
-            motion={motion}
-            name={isLegacyNpcs() ? null : name}
-            speech={isLegacyNpcs() ? null : bubble}
-          />
-        </group>
+        <VisitorModel
+          appearance={appearance || DEFAULT_APPEARANCE_FALLBACK}
+          outfit={outfit}
+          motion={motion}
+          name={isLegacyNpcs() ? null : name}
+          speech={isLegacyNpcs() ? null : bubble}
+        />
       </group>
     </>
   )
@@ -582,15 +581,13 @@ function RemoteVisitorNPC({ data }) {
     <>
       <BlobShadow target={group} />
       <group ref={group} position={[data.x || 0, 0, data.z || 0]} scale={scale}>
-        <group rotation={[0, Math.PI, 0]}>
-          <VisitorModel
-            appearance={data.appearance || DEFAULT_APPEARANCE_FALLBACK}
-            outfit={data.outfit || 'shirt'}
-            motion={motion}
-            name={data.name}
-            speech={data.speech || null}
-          />
-        </group>
+        <VisitorModel
+          appearance={data.appearance || DEFAULT_APPEARANCE_FALLBACK}
+          outfit={data.outfit || 'shirt'}
+          motion={motion}
+          name={data.name}
+          speech={data.speech || null}
+        />
       </group>
     </>
   )
