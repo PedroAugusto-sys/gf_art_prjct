@@ -160,8 +160,8 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         if (existing >= 0) backup[existing] = newArtwork
         else backup.push(newArtwork)
         localStorage.setItem('gf-my-artworks', JSON.stringify(backup))
-      } catch (err) {
-        console.warn('Failed to save to localStorage:', err)
+      } catch {
+        // Falha silenciosa - localStorage pode estar desabilitado
       }
 
       // Atualiza store local
@@ -185,7 +185,10 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
       setTitle('')
       setUploading(false)
     } catch (err) {
-      console.error('Error processing image:', err)
+      // Log apenas se for um erro real de processamento (não de rede/offline)
+      if (err?.message && !err.message.includes('network') && !err.message.includes('offline')) {
+        console.error('Error processing image:', err)
+      }
       setUploadError('Erro ao processar imagem. Tente novamente.')
       setUploading(false)
     }

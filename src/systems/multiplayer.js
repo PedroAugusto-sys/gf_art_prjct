@@ -28,6 +28,7 @@ export const NPC_SNAPSHOT_MS = 180
 
 const INSERT_COIN_TIMEOUT_MS = 12000
 const PLAYROOM_GAME_ID_DOCS = 'https://docs.joinplayroom.com/errors/no-game-id'
+let hasWarnedMissingGameId = false // Avisa apenas uma vez por sessão
 
 let connected = false
 let offline = false
@@ -148,9 +149,11 @@ export async function connectMultiplayer(identity, roomCode) {
   const gameId = import.meta.env.VITE_PLAYROOM_GAME_ID
   if (gameId) {
     opts.gameId = gameId
-  } else if (typeof console !== 'undefined') {
-    console.warn(
-      `[multiplayer] VITE_PLAYROOM_GAME_ID nao definido. Playroom pode limitar DAU. Veja ${PLAYROOM_GAME_ID_DOCS}`
+  } else if (!hasWarnedMissingGameId && typeof console !== 'undefined') {
+    // Avisa apenas uma vez por sessão (não spam a cada entrada)
+    hasWarnedMissingGameId = true
+    console.info(
+      `[multiplayer] Playroom configurado sem Game ID (limite de DAU aplicado). Configure VITE_PLAYROOM_GAME_ID para produção. Veja .env.example`
     )
   }
 
@@ -175,7 +178,10 @@ export async function connectMultiplayer(identity, roomCode) {
     }
     return { ok: true, offline: false, roomCode: code }
   } catch (err) {
-    console.warn('[multiplayer] Playroom indisponível, modo offline:', err)
+    // Modo offline silencioso - apenas um log discreto
+    if (typeof console !== 'undefined' && !hasWarnedMissingGameId) {
+      console.info('[multiplayer] Modo offline (Playroom indisponível)')
+    }
     connected = false
     offline = true
     activeRoomCode = code
@@ -204,7 +210,7 @@ export function publishIdentity(identity) {
     me.setState('outfit', identity.outfit, true)
     me.setState('scale', identity.scale, true)
   } catch (e) {
-    console.warn('[multiplayer] falha ao publicar identidade', e)
+    // Falha silenciosa - modo offline ou estado não disponível
   }
 }
 

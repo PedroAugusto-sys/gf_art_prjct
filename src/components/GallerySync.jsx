@@ -26,8 +26,8 @@ export function GallerySync() {
             setCommunityArtworks(gallery.artworks)
           }
         }
-      } catch (err) {
-        console.warn('Failed to load initial gallery state:', err)
+      } catch {
+        // Falha silenciosa - modo offline ou estado não disponível
       }
     }
 
@@ -45,8 +45,8 @@ export function GallerySync() {
           setCommunityArtworks(gallery.artworks)
         }
       })
-    } catch (err) {
-      console.warn('Failed to subscribe to gallery state:', err)
+    } catch {
+      // Falha silenciosa - modo offline ou subscribeState não disponível
     }
 
     return () => {

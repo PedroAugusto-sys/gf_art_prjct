@@ -74,7 +74,10 @@ export function CommunityGalleryUI() {
         0.85
       )
     } catch (err) {
-      console.error('Erro ao processar imagem:', err)
+      // Log apenas se for um erro real de processamento
+      if (err?.message && !err.message.includes('network') && !err.message.includes('offline')) {
+        console.error('Erro ao processar imagem:', err)
+      }
       setUploading(false)
     }
   }

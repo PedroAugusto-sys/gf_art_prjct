@@ -132,7 +132,7 @@ export default function UIOverlay() {
       }
       beginPlaying()
     } catch (err) {
-      console.warn('[ui] falha ao entrar:', err)
+      // Modo offline - mensagem já aparece na UI, sem console noise
       setNickError('Não foi possível conectar. Tente de novo.')
       setOfflineHint('Sem conexão multiplayer — jogando sozinho.')
       setMpStatus({ ready: true, offline: true })
