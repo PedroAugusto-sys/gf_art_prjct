@@ -231,14 +231,13 @@ export default function Player({ position = [0, 2, 12] }) {
         0,
         Math.cos(lookYaw) * THIRD_PERSON_DISTANCE
       )
-      thirdPersonTarget.set(
+      
+      // Posiciona camera diretamente (sem lerp para evitar ghosting/trail)
+      camera.position.set(
         t.x - thirdPersonOffset.x,
         t.y + THIRD_PERSON_HEIGHT,
         t.z - thirdPersonOffset.z
       )
-      
-      // Lerp suave para a posicao alvo
-      camera.position.lerp(thirdPersonTarget, THIRD_PERSON_LERP)
       
       // Camera olha para o jogador (altura do torso)
       thirdPersonLookAt.set(t.x, t.y + 1.3, t.z)
@@ -334,10 +333,14 @@ export default function Player({ position = [0, 2, 12] }) {
     wasMoving.current = direction.lengthSq() > 0.01
     visitorMotionRef.current.walking = wasMoving.current
     
-    // 7) Atualiza rotacao do VisitorModel para olhar na direcao do movimento
-    if (wasMoving.current && visitorGroupRef.current && mode === 'third') {
-      const targetYaw = Math.atan2(direction.x, direction.z)
-      visitorGroupRef.current.rotation.y = targetYaw
+    // 7) Atualiza rotacao do VisitorModel para seguir o look da camera em 360°
+    if (visitorGroupRef.current && mode === 'third') {
+      let lookYaw = yaw.current
+      if (!mobile) {
+        camEuler.setFromQuaternion(camera.quaternion, 'YXZ')
+        lookYaw = camEuler.y
+      }
+      visitorGroupRef.current.rotation.y = lookYaw
     }
     
     publishNow()

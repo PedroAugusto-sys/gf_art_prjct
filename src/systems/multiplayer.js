@@ -27,8 +27,9 @@ export const POSE_INTERVAL_MS = 100
 export const NPC_SNAPSHOT_MS = 180
 
 const INSERT_COIN_TIMEOUT_MS = 12000
-const PLAYROOM_GAME_ID_DOCS = 'https://docs.joinplayroom.com/errors/no-game-id'
+const PLAYROOM_DOCS_URL = 'https://docs.joinplayroom.com/usage/getting-started'
 let hasWarnedMissingGameId = false // Avisa apenas uma vez por sessão
+let hasWarnedWebSocketBlocked = false
 
 let connected = false
 let offline = false
@@ -153,7 +154,19 @@ export async function connectMultiplayer(identity, roomCode) {
     // Avisa apenas uma vez por sessão (não spam a cada entrada)
     hasWarnedMissingGameId = true
     console.info(
-      `[multiplayer] Playroom configurado sem Game ID (limite de DAU aplicado). Configure VITE_PLAYROOM_GAME_ID para produção. Veja .env.example`
+      `%c[multiplayer] Playroom em modo desenvolvimento%c
+      
+✓ Funcionando com limite de DAU (Daily Active Users)
+      
+Para PRODUÇÃO (DAU ilimitado):
+1. Crie conta gratuita: https://app.joinplayroom.com
+2. Crie novo jogo no dashboard
+3. Copie o Game ID
+4. Configure VITE_PLAYROOM_GAME_ID no arquivo .env (veja .env.example)
+
+Documentação: ${PLAYROOM_DOCS_URL}`,
+      'color: #16a34a; font-weight: bold',
+      'color: inherit; font-weight: normal'
     )
   }
 
@@ -178,9 +191,36 @@ export async function connectMultiplayer(identity, roomCode) {
     }
     return { ok: true, offline: false, roomCode: code }
   } catch (err) {
-    // Modo offline silencioso - apenas um log discreto
+    // Modo offline silencioso com melhor diagnóstico
     if (typeof console !== 'undefined' && !hasWarnedMissingGameId) {
-      console.info('[multiplayer] Modo offline (Playroom indisponível)')
+      // Detecta erro de WebSocket bloqueado (adblock/extensão)
+      const isWebSocketBlocked = 
+        err?.message?.includes('WebSocket') ||
+        err?.message?.includes('ERR_BLOCKED_BY_CLIENT') ||
+        err?.message?.includes('net::ERR')
+      
+      if (isWebSocketBlocked && !hasWarnedWebSocketBlocked) {
+        hasWarnedWebSocketBlocked = true
+        console.warn(
+          `%c[multiplayer] WebSocket bloqueado%c
+          
+⚠️ Conexão multiplayer falhou (possíveis causas):
+  • Bloqueador de anúncios ativo (ex: uBlock, AdBlock)
+  • Extensão de privacidade bloqueando WebSockets
+  • Firewall/proxy corporativo
+  
+💡 Solução:
+  • Desative bloqueadores para este site
+  • Ou use navegação privada/anônima
+  • Ou adicione exceção para joinplayroom.com
+  
+✓ O museu continua funcionando em modo solo`,
+          'color: #eab308; font-weight: bold',
+          'color: inherit; font-weight: normal'
+        )
+      } else {
+        console.info('[multiplayer] Modo solo (Playroom indisponível)')
+      }
     }
     connected = false
     offline = true

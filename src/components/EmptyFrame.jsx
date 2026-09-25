@@ -74,6 +74,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const [title, setTitle] = useState('')
   const [uploadError, setUploadError] = useState('')
   const [showTitle, setShowTitle] = useState(false)
+  const [artworkTexture, setArtworkTexture] = useState(null)
   const meshRef = useRef(null)
   const matRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -96,6 +97,42 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const authorId = getStableAuthorId()
   const canEdit = !artwork || artwork.authorId === authorId || isHost
 
+  // Carrega textura quando artwork muda
+  useEffect(() => {
+    if (!artwork?.dataUrl) {
+      setArtworkTexture(null)
+      return
+    }
+    
+    // Carrega data URL como textura usando Image
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    
+    img.onload = () => {
+      const texture = new THREE.Texture(img)
+      texture.colorSpace = THREE.SRGBColorSpace
+      texture.minFilter = THREE.LinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.needsUpdate = true
+      setArtworkTexture(texture)
+    }
+    
+    img.onerror = (err) => {
+      console.error('Error loading artwork texture:', err)
+      setArtworkTexture(null)
+    }
+    
+    img.src = artwork.dataUrl
+    
+    // Cleanup
+    return () => {
+      if (img) {
+        img.onload = null
+        img.onerror = null
+      }
+    }
+  }, [artwork?.dataUrl])
+
   const handleInteract = () => {
     if (!canEdit) return
     unlockPointer()
@@ -106,8 +143,12 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     setShowUploadUI(false)
     setTitle('')
     setUploadError('')
+    setUploading(false)
     if (!isMobile) {
-      lockPointer()
+      // Pequeno delay para evitar race condition com pointer lock
+      setTimeout(() => {
+        lockPointer()
+      }, 100)
     }
   }
 
@@ -259,22 +300,8 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
           emissiveIntensity={0}
           roughness={0.8}
           metalness={0}
+          map={artworkTexture}
         />
-
-        {artwork && (
-          <Html center distanceFactor={10} style={{ pointerEvents: 'none' }}>
-            <img
-              src={artwork.dataUrl}
-              alt={artwork.title}
-              style={{
-                width: `${width * 100}px`,
-                height: `${height * 100}px`,
-                objectFit: 'cover',
-                borderRadius: '4px',
-              }}
-            />
-          </Html>
-        )}
       </mesh>
 
       {isNear && canEdit && !showUploadUI && (
@@ -388,7 +415,10 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
                 {uploading ? 'Processando...' : 'Escolher imagem'}
               </button>
               <button
-                onClick={closeModal}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  closeModal()
+                }}
                 disabled={uploading}
                 style={{
                   padding: '10px 16px',
