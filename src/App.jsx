@@ -9,6 +9,7 @@ import MuseumEnvironment from './components/MuseumEnvironment'
 import PrototypeEnvironment from './components/PrototypeEnvironment'
 import ArtworkFrame from './components/ArtworkFrame'
 import EmptyFrame from './components/EmptyFrame'
+import WallPanel from './components/WallPanel'
 import VisitorLayer, { VisitorFlowTicker } from './components/NPC'
 import DoubleDoor from './components/Door'
 import Parking from './components/Parking'
@@ -79,6 +80,10 @@ export default function App() {
                 size={frame.size}
               />
             ))}
+
+            {hasCommunityGallery && (
+              <WallPanel position={[-10, 2.2, -18.5]} rotation={[0, 0, 0]} />
+            )}
 
             {!prototype && (
               <>
