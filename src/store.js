@@ -228,6 +228,20 @@ export const useGameStore = create((set, get) => ({
   setMpStatus: ({ ready, offline }) =>
     set({ mpReady: !!ready, mpOffline: !!offline }),
 
+  // ---------- Galeria comunitaria (v1) ----------
+  annexCount: 0,
+  communityArtworks: [],
+  setAnnexCount: (count) => set({ annexCount: Math.max(0, Math.min(2, count)) }),
+  addCommunityArtwork: (artwork) =>
+    set((state) => ({
+      communityArtworks: [...state.communityArtworks, artwork],
+    })),
+  updateCommunityArtwork: (id, artwork) =>
+    set((state) => ({
+      communityArtworks: state.communityArtworks.map((art) => (art.id === id ? artwork : art)),
+    })),
+  setCommunityArtworks: (artworks) => set({ communityArtworks: artworks }),
+
   // ---------- Versao / timeline ----------
   selectedVersionId:
     typeof window !== 'undefined'

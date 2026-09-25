@@ -18,6 +18,21 @@ export const ROOM = {
 export const HALF_W = ROOM.width / 2
 export const HALF_D = ROOM.depth / 2
 
+// ---------- Salas anexas (max 2) ----------
+export const ANNEX_DEPTH = 20 // profundidade de cada sala anexa
+export const ANNEX_CORRIDOR_WIDTH = 4 // largura do corredor central
+
+export function getAnnexRoomBounds(annexIndex) {
+  const baseZ = -HALF_D - annexIndex * ANNEX_DEPTH
+  return {
+    minX: -HALF_W,
+    maxX: HALF_W,
+    minZ: baseZ - ANNEX_DEPTH,
+    maxZ: baseZ,
+    centerZ: baseZ - ANNEX_DEPTH / 2,
+  }
+}
+
 // ---------- Estrutura ----------
 export const PILLAR_POSITIONS = [
   [-9, -12], [-9, -4], [-9, 4], [-9, 12],

@@ -17,6 +17,8 @@ import {
   myPlayer,
   isHost as playroomIsHost,
   setState as roomSetState,
+  getState as roomGetState,
+  onPlayerJoin,
 } from 'playroomkit'
 import { DEFAULT_VERSION_ID, getVersionById } from '../data/versions'
 
@@ -230,6 +232,24 @@ export function publishNpcs(snapshot) {
     roomSetState('npcs', snapshot, false)
   } catch {
     /* ignore */
+  }
+}
+
+export function publishGalleryState(gallery) {
+  if (!connected || offline) return
+  try {
+    roomSetState('gallery', gallery, true)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function subscribeGalleryState(callback) {
+  if (!connected || offline) return () => {}
+  try {
+    return roomGetState('gallery', callback)
+  } catch {
+    return () => {}
   }
 }
 
