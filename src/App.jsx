@@ -8,6 +8,7 @@ import Player from './components/Player'
 import MuseumEnvironment from './components/MuseumEnvironment'
 import PrototypeEnvironment from './components/PrototypeEnvironment'
 import ArtworkFrame from './components/ArtworkFrame'
+import EmptyFrame from './components/EmptyFrame'
 import VisitorLayer, { VisitorFlowTicker } from './components/NPC'
 import DoubleDoor from './components/Door'
 import Parking from './components/Parking'
@@ -27,9 +28,19 @@ export default function App() {
   const mpOffline = useGameStore((s) => s.mpOffline)
   const selectedVersionId = useGameStore((s) => s.selectedVersionId)
   const prototype = !!getVersionById(selectedVersionId)?.flags?.prototypeScene
+  const hasCommunityGallery = !!getVersionById(selectedVersionId)?.flags?.communityGallery
 
   const artworks = artworksData.artworks || []
   const showRemotes = isStarted && mpReady && !mpOffline
+
+  const communityFrames = hasCommunityGallery
+    ? [
+        { id: 'community-1', position: [-13.7, 2.2, 0], rotation: [0, 1.5708, 0], size: [2, 1.5] },
+        { id: 'community-2', position: [-13.7, 2.2, 6], rotation: [0, 1.5708, 0], size: [2, 1.5] },
+        { id: 'community-3', position: [13.7, 2.2, 0], rotation: [0, -1.5708, 0], size: [2, 1.5] },
+        { id: 'community-4', position: [13.7, 2.2, 6], rotation: [0, -1.5708, 0], size: [2, 1.5] },
+      ]
+    : []
 
   return (
     <div className="fixed inset-0">
@@ -56,6 +67,16 @@ export default function App() {
 
             {artworks.map((art) => (
               <ArtworkFrame key={art.id} artwork={art} />
+            ))}
+
+            {communityFrames.map((frame) => (
+              <EmptyFrame
+                key={frame.id}
+                frameId={frame.id}
+                position={frame.position}
+                rotation={frame.rotation}
+                size={frame.size}
+              />
             ))}
 
             {!prototype && (
