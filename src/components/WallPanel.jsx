@@ -31,7 +31,7 @@ export default function WallPanel({ position, rotation }) {
 
     const camera = state.camera
     const distance = camera.position.distanceTo(meshRef.current.position)
-    const near = distance < 4.0
+    const near = distance < 6.0  // Aumentado de 4.0 para 6.0 (mais fácil de ativar)
 
     if (near !== isNear) {
       setIsNear(near)

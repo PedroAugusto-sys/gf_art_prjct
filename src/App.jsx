@@ -97,7 +97,7 @@ export default function App() {
             ))}
 
             {hasCommunityGallery && (
-              <WallPanel position={[-10, 2.2, -18.5]} rotation={[0, 0, 0]} />
+              <WallPanel position={[0, 2.2, -18.5]} rotation={[0, 0, 0]} />
             )}
 
             {!prototype && (
