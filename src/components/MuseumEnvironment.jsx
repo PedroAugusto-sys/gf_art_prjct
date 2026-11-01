@@ -20,6 +20,7 @@ import {
   DOORS,
   INDOOR_VEGETATION,
   OUTDOOR_VEGETATION,
+  ANNEX_CORRIDOR_WIDTH,
 } from '../data/museumLayout'
 
 /**
@@ -153,14 +154,42 @@ export default function MuseumEnvironment() {
           </mesh>
         ))}
 
-        {/* Parede Norte (z-) */}
-        <mesh material={materials.wall} position={[0, ROOM.height / 2, -HALF_D]} receiveShadow>
-          <boxGeometry args={[ROOM.width, ROOM.height, ROOM.wallThickness]} />
-        </mesh>
-        <CuboidCollider
-          args={[HALF_W, ROOM.height / 2, ROOM.wallThickness / 2]}
-          position={[0, ROOM.height / 2, -HALF_D]}
-        />
+        {/* Parede Norte (z-) - com abertura quando galeria expandida */}
+        {annexCount === 0 ? (
+          // Parede completa sem anexo
+          <>
+            <mesh material={materials.wall} position={[0, ROOM.height / 2, -HALF_D]} receiveShadow>
+              <boxGeometry args={[ROOM.width, ROOM.height, ROOM.wallThickness]} />
+            </mesh>
+            <CuboidCollider
+              args={[HALF_W, ROOM.height / 2, ROOM.wallThickness / 2]}
+              position={[0, ROOM.height / 2, -HALF_D]}
+            />
+          </>
+        ) : (
+          // Parede com abertura central para o corredor do anexo
+          <>
+            {[-1, 1].map((side) => {
+              const sideWidth = (ROOM.width - ANNEX_CORRIDOR_WIDTH) / 2
+              const sideX = side * (ANNEX_CORRIDOR_WIDTH / 2 + sideWidth / 2)
+              return (
+                <group key={`north-wall-${side}`}>
+                  <mesh
+                    material={materials.wall}
+                    position={[sideX, ROOM.height / 2, -HALF_D]}
+                    receiveShadow
+                  >
+                    <boxGeometry args={[sideWidth, ROOM.height, ROOM.wallThickness]} />
+                  </mesh>
+                  <CuboidCollider
+                    args={[sideWidth / 2, ROOM.height / 2, ROOM.wallThickness / 2]}
+                    position={[sideX, ROOM.height / 2, -HALF_D]}
+                  />
+                </group>
+              )
+            })}
+          </>
+        )}
 
         {/* Parede Leste (x+) */}
         <mesh material={materials.wall} position={[HALF_W, ROOM.height / 2, 0]} receiveShadow>
