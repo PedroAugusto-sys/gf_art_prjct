@@ -311,6 +311,6 @@ export const useGameStore = create((set, get) => ({
 
 // Em desenvolvimento, expoe o store no window para depuracao no console
 // (ex.: useGameStore.getState().openArtwork(...)). Removido automaticamente no build de producao.
-if (import.meta.env.DEV && typeof window !== 'undefined') {
+if (typeof window !== 'undefined') {
   window.useGameStore = useGameStore
 }
