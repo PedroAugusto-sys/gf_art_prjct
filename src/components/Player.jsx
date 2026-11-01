@@ -334,7 +334,8 @@ export default function Player({ position = [0, 2, 12] }) {
     visitorMotionRef.current.walking = wasMoving.current
     
     // 7) Atualiza rotacao do VisitorModel para seguir o look da camera em 360°
-    if (visitorGroupRef.current && mode === 'third') {
+    // Funciona em AMBOS os modos (1ª e 3ª pessoa)
+    if (visitorGroupRef.current) {
       let lookYaw = yaw.current
       if (!mobile) {
         camEuler.setFromQuaternion(camera.quaternion, 'YXZ')

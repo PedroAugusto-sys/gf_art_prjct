@@ -7,9 +7,11 @@ import { publishGalleryState, isRoomHost, isMultiplayerOffline } from '../system
 import { useEmptyFrameInteraction } from '../hooks/useEmptyFrameInteraction'
 
 /**
- * Redimensiona imagem para JPEG pequeno (~480px no lado maior)
+ * Comprime e converte imagem para WebP (melhor compressão que JPEG)
+ * Redimensiona para max 480px no lado maior
+ * @returns {Promise<string>} data URL em formato WebP comprimido
  */
-async function resizeImageToJpeg(file, maxSize = 480) {
+async function resizeImageToWebP(file, maxSize = 480) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = (e) => {
@@ -34,13 +36,13 @@ async function resizeImageToJpeg(file, maxSize = 480) {
               reject(new Error('Failed to create blob'))
               return
             }
-            const jpegReader = new FileReader()
-            jpegReader.onloadend = () => resolve(jpegReader.result)
-            jpegReader.onerror = reject
-            jpegReader.readAsDataURL(blob)
+            const webpReader = new FileReader()
+            webpReader.onloadend = () => resolve(webpReader.result)
+            webpReader.onerror = reject
+            webpReader.readAsDataURL(blob)
           },
-          'image/jpeg',
-          0.85
+          'image/webp',
+          0.75 // Qualidade WebP (75% = bom balanço qualidade/tamanho)
         )
       }
       img.onerror = reject
@@ -192,7 +194,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     setUploadError('')
 
     try {
-      const dataUrl = await resizeImageToJpeg(file, 480)
+      const dataUrl = await resizeImageToWebP(file, 480)
 
       const newArtwork = {
         id: artwork?.id || `community-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -215,14 +217,14 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         // Falha silenciosa - localStorage pode estar desabilitado
       }
 
-      // Atualiza store local
+      // Atualiza store local IMEDIATAMENTE (para o publisher ver)
       if (artwork) {
         updateCommunityArtwork(artwork.id, newArtwork)
       } else {
         addCommunityArtwork(newArtwork)
       }
 
-      // Publica no Playroom
+      // Publica no Playroom (sync para outros jogadores)
       const updatedArtworks = artwork
         ? communityArtworks.map((art) => (art.id === artwork.id ? newArtwork : art))
         : [...communityArtworks, newArtwork]
@@ -444,7 +446,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
                 textAlign: 'center',
               }}
             >
-              A imagem será redimensionada para ~480px
+              A imagem será convertida para WebP (~480px)
             </div>
           </div>
         </Html>
