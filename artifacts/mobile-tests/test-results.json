@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-11-01T17:23:38.779Z",
+  "mobile": [
+    {
+      "device": "iPhone 13 (Portrait)",
+      "tests": {
+        "entering": "PASS",
+        "movement": "SKIP: Controles não visíveis",
+        "cameraRotation": "PASS",
+        "firstPersonClipping": "PASS (visual check)",
+        "artworkPublish": "SKIP: Requer file picker manual",
+        "consoleErrors": "PASS"
+      },
+      "errors": []
+    },
+    {
+      "device": "Pixel 5 (Portrait)",
+      "tests": {
+        "entering": "PASS",
+        "movement": "SKIP: Controles não visíveis",
+        "cameraRotation": "PASS",
+        "firstPersonClipping": "PASS (visual check)",
+        "artworkPublish": "SKIP: Requer file picker manual",
+        "consoleErrors": "PASS"
+      },
+      "errors": []
+    }
+  ],
+  "desktop": {
+    "pass": false,
+    "error": "Modal não abriu"
+  }
+}

@@ -38,8 +38,30 @@ export default function WallPanel({ position, rotation }) {
     }
   })
 
-  const handleClick = () => {
-    if (!isNear) return
+  // Expor função para testes automatizados
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.__WALL_PANEL_OPEN__ = () => {
+        if (isNear) {
+          console.log('[WallPanel] Abrindo modal via helper de teste')
+          unlockPointer()
+          setShowUI(true)
+          return true
+        }
+        console.log('[WallPanel] Não pode abrir - jogador longe')
+        return false
+      }
+    }
+  }, [isNear])
+  
+  const handleClick = (e) => {
+    console.log('[WallPanel] Click detectado!', { isNear, annexCount, canExpand })
+    if (!isNear) {
+      console.log('[WallPanel] Click ignorado - jogador longe')
+      return
+    }
+    console.log('[WallPanel] Abrindo modal de expansão')
+    e?.stopPropagation()
     unlockPointer()
     setShowUI(true)
   }
@@ -106,11 +128,13 @@ export default function WallPanel({ position, rotation }) {
         ref={meshRef}
         material={panelMaterial}
         onPointerOver={(e) => {
+          console.log('[WallPanel] Pointer over')
           e.stopPropagation()
           setHovered(true)
           document.body.style.cursor = 'pointer'
         }}
         onPointerOut={(e) => {
+          console.log('[WallPanel] Pointer out')
           e.stopPropagation()
           setHovered(false)
           document.body.style.cursor = 'auto'
