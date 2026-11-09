@@ -5,6 +5,7 @@ import { useGameStore } from '../store'
 import { Html } from '@react-three/drei'
 import { publishGalleryState, isRoomHost, isMultiplayerOffline } from '../systems/multiplayer'
 import { useEmptyFrameInteraction } from '../hooks/useEmptyFrameInteraction'
+import { uploadArtwork, deleteArtwork, reportArtwork, getSessionToken } from '../systems/temporaryArtworks'
 
 /**
  * Comprime e converte imagem para WebP (melhor compressão que JPEG)
@@ -97,16 +98,26 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const artwork = communityArtworks.find((art) => art.frameId === frameId)
   const isHost = isRoomHost() || isMultiplayerOffline()
   const authorId = getStableAuthorId()
-  const canEdit = !artwork || artwork.authorId === authorId || isHost
+  
+  // Verifica ownership via token de sessão (mais seguro que authorId localStorage)
+  const sessionToken = getSessionToken()
+  const isOwner = artwork && (
+    artwork.authorId === authorId || // Compatibilidade com sistema antigo
+    (sessionToken && artwork.authorToken === sessionToken) // Novo sistema
+  )
+  const canEdit = !artwork || isOwner || isHost
 
   // Carrega textura quando artwork muda
   useEffect(() => {
-    if (!artwork?.dataUrl) {
+    // Suporta tanto data URLs (sistema antigo) quanto URLs externas (novo sistema)
+    const imageUrl = artwork?.url || artwork?.dataUrl
+    
+    if (!imageUrl) {
       setArtworkTexture(null)
       return
     }
     
-    // Carrega data URL como textura usando Image
+    // Carrega URL como textura usando Image
     const img = new Image()
     img.crossOrigin = 'anonymous'
     
@@ -124,7 +135,12 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
       setArtworkTexture(null)
     }
     
-    img.src = artwork.dataUrl
+    // URL completa se começa com http, senão assume relativo ao servidor
+    const fullUrl = imageUrl.startsWith('http') || imageUrl.startsWith('data:') 
+      ? imageUrl 
+      : `${import.meta.env.VITE_ART_SERVER_URL || 'http://localhost:3001'}${imageUrl}`
+    
+    img.src = fullUrl
     
     // Cleanup
     return () => {
@@ -133,7 +149,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         img.onerror = null
       }
     }
-  }, [artwork?.dataUrl])
+  }, [artwork?.dataUrl, artwork?.url])
 
   const handleInteract = () => {
     if (!canEdit) return
@@ -194,6 +210,47 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     setUploadError('')
 
     try {
+      // Usa novo sistema de upload temporário se token disponível
+      if (sessionToken) {
+        const uploadedArtwork = await uploadArtwork(file, frameId, title.trim() || 'Sem título')
+        
+        // Cria objeto compatível com sistema antigo
+        const newArtwork = {
+          id: uploadedArtwork.id,
+          frameId: uploadedArtwork.frameId,
+          dataUrl: null, // URL externa, não data URL
+          url: uploadedArtwork.url, // URL do servidor
+          title: uploadedArtwork.title,
+          author: uploadedArtwork.author,
+          authorId, // Mantém para compatibilidade
+          authorToken: sessionToken, // Novo campo para ownership
+          timestamp: uploadedArtwork.timestamp,
+          isTemporary: true // Flag para indicar que é temporário
+        }
+
+        // Atualiza store local
+        if (artwork) {
+          updateCommunityArtwork(artwork.id, newArtwork)
+        } else {
+          addCommunityArtwork(newArtwork)
+        }
+
+        // Publica no Playroom (para sync multiplayer)
+        const updatedArtworks = artwork
+          ? communityArtworks.map((art) => (art.id === artwork.id ? newArtwork : art))
+          : [...communityArtworks, newArtwork]
+
+        publishGalleryState({
+          annexCount,
+          artworks: updatedArtworks,
+        })
+
+        closeModal()
+        setUploading(false)
+        return
+      }
+
+      // Fallback: sistema antigo com data URLs (se servidor indisponível)
       const dataUrl = await resizeImageToWebP(file, 480)
 
       const newArtwork = {
@@ -241,7 +298,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
       if (err?.message && !err.message.includes('network') && !err.message.includes('offline')) {
         console.error('Error processing image:', err)
       }
-      setUploadError('Erro ao processar imagem. Tente novamente.')
+      setUploadError(err.message || 'Erro ao processar imagem. Tente novamente.')
       setUploading(false)
     }
   }
@@ -442,11 +499,16 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
               style={{
                 marginTop: '12px',
                 fontSize: '11px',
-                opacity: 0.6,
+                opacity: 0.7,
                 textAlign: 'center',
+                padding: '8px',
+                background: 'rgba(251,191,36,0.1)',
+                border: '1px solid rgba(251,191,36,0.3)',
+                borderRadius: '6px',
+                color: '#fbbf24'
               }}
             >
-              A imagem será convertida para WebP (~480px)
+              ⏱️ <strong>Obra temporária:</strong> permanece apenas enquanto há visitantes na sala. Quando todos saírem, a exposição recomeça vazia.
             </div>
           </div>
         </Html>
@@ -458,16 +520,94 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
             style={{
               background: 'rgba(0,0,0,0.7)',
               color: 'white',
-              padding: '4px 12px',
-              borderRadius: '4px',
+              padding: '8px 12px',
+              borderRadius: '6px',
               fontSize: '12px',
               textAlign: 'center',
-              maxWidth: '200px',
+              maxWidth: '220px',
               backdropFilter: 'blur(4px)',
             }}
           >
             <div style={{ fontWeight: 600, marginBottom: '2px' }}>{artwork.title}</div>
-            <div style={{ opacity: 0.8, fontSize: '10px' }}>{artwork.author}</div>
+            <div style={{ opacity: 0.8, fontSize: '10px', marginBottom: '6px' }}>{artwork.author}</div>
+            
+            {artwork.isTemporary && (
+              <div style={{ 
+                fontSize: '9px', 
+                opacity: 0.6, 
+                marginBottom: '6px',
+                borderTop: '1px solid rgba(255,255,255,0.2)',
+                paddingTop: '4px'
+              }}>
+                ⏱️ Obra temporária da sessão
+              </div>
+            )}
+            
+            {artwork.isTemporary && (
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                {isOwner && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      if (confirm(`Deletar "${artwork.title}"?`)) {
+                        try {
+                          await deleteArtwork(artwork.id)
+                          // Remove do store local
+                          updateCommunityArtwork(artwork.id, null)
+                          // Atualiza Playroom
+                          publishGalleryState({
+                            annexCount,
+                            artworks: communityArtworks.filter(a => a.id !== artwork.id)
+                          })
+                        } catch (err) {
+                          alert(`Erro: ${err.message}`)
+                        }
+                      }
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: '#dc2626',
+                      color: 'white',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    🗑️ Deletar
+                  </button>
+                )}
+                
+                {!isOwner && (
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      if (confirm('Reportar esta obra como inapropriada?')) {
+                        try {
+                          await reportArtwork(artwork.id)
+                          alert('Obra reportada com sucesso')
+                        } catch (err) {
+                          alert(`Erro: ${err.message}`)
+                        }
+                      }
+                    }}
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      background: 'transparent',
+                      color: 'white',
+                      fontSize: '10px',
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    ⚠️ Reportar
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </Html>
       )}

@@ -17,6 +17,7 @@ import UIOverlay from './components/UIOverlay'
 import ArtworkFocus from './components/ArtworkFocus'
 import RemotePlayers from './components/RemotePlayers'
 import { GallerySync } from './components/GallerySync'
+import { TemporaryArtworkSession } from './components/TemporaryArtworkSession'
 import artworksData from './data/artworks.json'
 import { HALF_D } from './data/museumLayout'
 import { getVersionById } from './data/versions'
@@ -97,7 +98,7 @@ export default function App() {
             ))}
 
             {hasCommunityGallery && (
-              <WallPanel position={[-10, 2.2, -18.5]} rotation={[0, 0, 0]} />
+              <WallPanel position={[0, 2.2, -18.5]} rotation={[0, 0, 0]} />
             )}
 
             {!prototype && (
@@ -120,6 +121,7 @@ export default function App() {
 
       <UIOverlay />
       <GallerySync />
+      <TemporaryArtworkSession />
     </div>
   )
 }
