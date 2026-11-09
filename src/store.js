@@ -238,9 +238,15 @@ export const useGameStore = create((set, get) => ({
     })),
   updateCommunityArtwork: (id, artwork) =>
     set((state) => ({
-      communityArtworks: state.communityArtworks.map((art) => (art.id === id ? artwork : art)),
+      communityArtworks: artwork === null
+        ? state.communityArtworks.filter(a => a.id !== id)
+        : state.communityArtworks.map((art) => (art.id === id ? artwork : art)),
     })),
   setCommunityArtworks: (artworks) => set({ communityArtworks: artworks }),
+  
+  // Sistema de uploads temporários (servidor backend)
+  temporaryArtworksEnabled: false,
+  setTemporaryArtworksEnabled: (enabled) => set({ temporaryArtworksEnabled: enabled }),
 
   // ---------- Versao / timeline ----------
   selectedVersionId:
