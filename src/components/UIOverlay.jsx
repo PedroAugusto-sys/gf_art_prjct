@@ -5,7 +5,7 @@ import VirtualControls from './VirtualControls'
 import VersionTimeline from './VersionTimeline'
 import InviteQr from './InviteQr'
 import { generateAppearance, sanitizeNick } from '../systems/appearance'
-import { connectMultiplayer } from '../systems/multiplayer'
+import { connectMultiplayer, publishGalleryState } from '../systems/multiplayer'
 import { getVersionById } from '../data/versions'
 
 /**
@@ -45,6 +45,11 @@ export default function UIOverlay() {
       : getVersionById('v0')
 
   const hasCommunityGallery = activeVersion?.flags?.communityGallery ?? false
+  const annexCount = useGameStore((s) => s.annexCount)
+  const setAnnexCount = useGameStore((s) => s.setAnnexCount)
+  const communityArtworks = useGameStore((s) => s.communityArtworks)
+  const [showExpandModal, setShowExpandModal] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
 
   useEffect(() => {
     ensurePlayableVersion?.()
@@ -375,6 +380,215 @@ export default function UIOverlay() {
 
       {/* ============ CONTROLES MOBILE ============ */}
       {isMobile && isStarted && !selectedArtwork && <VirtualControls />}
+
+      {/* ============ BOTÕES FLUTUANTES: EXPANDIR E PUBLICAR (COMUNIDADE) ============ */}
+      {isStarted && !selectedArtwork && hasCommunityGallery && (
+        <div className="pointer-events-none fixed bottom-4 right-4 z-40 flex flex-col gap-3">
+          {/* Botão Expandir Galeria */}
+          {annexCount < 2 && (
+            <button
+              type="button"
+              onClick={() => {
+                unlockPointer()
+                setShowExpandModal(true)
+              }}
+              className="pointer-events-auto flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-3 text-sm font-bold text-white shadow-2xl transition-all hover:scale-105 hover:shadow-blue-500/50 active:scale-95"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+                <path fillRule="evenodd" d="M12 3.75a.75.75 0 01.75.75v6.75h6.75a.75.75 0 010 1.5h-6.75v6.75a.75.75 0 01-1.5 0v-6.75H4.5a.75.75 0 010-1.5h6.75V4.5a.75.75 0 01.75-.75z" clipRule="evenodd" />
+              </svg>
+              Expandir Galeria
+              <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
+                {annexCount}/2
+              </span>
+            </button>
+          )}
+
+          {/* Botão Publicar Obra */}
+          <button
+            type="button"
+            onClick={() => {
+              unlockPointer()
+              setShowUploadModal(true)
+            }}
+            className="pointer-events-auto flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-5 py-3 text-sm font-bold text-white shadow-2xl transition-all hover:scale-105 hover:shadow-emerald-500/50 active:scale-95"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
+              <path d="M11.47 1.72a.75.75 0 011.06 0l3 3a.75.75 0 01-1.06 1.06l-1.72-1.72V7.5h-1.5V4.06L9.53 5.78a.75.75 0 01-1.06-1.06l3-3zM11.25 7.5V15a.75.75 0 001.5 0V7.5h3.75a3 3 0 013 3v9a3 3 0 01-3 3h-9a3 3 0 01-3-3v-9a3 3 0 013-3h3.75z" />
+            </svg>
+            Publicar Obra
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
+              {communityArtworks.length}
+            </span>
+          </button>
+        </div>
+      )}
+
+      {/* ============ MODAL EXPANDIR GALERIA ============ */}
+      <AnimatePresence>
+        {showExpandModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            onClick={() => {
+              setShowExpandModal(false)
+              if (!isMobile) setTimeout(() => lockPointer(), 100)
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl bg-neutral-900 p-8 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="mb-4 text-2xl font-semibold text-white">Expandir Galeria</h2>
+              <p className="mb-6 text-sm leading-relaxed text-white/70">
+                Adicione mais espaço para expor obras comunitárias. Cada expansão cria uma nova sala anexa com 4 quadros adicionais.
+              </p>
+
+              <div className="mb-6 rounded-lg bg-white/5 p-4">
+                <div className="mb-2 flex items-center justify-between text-sm text-white/60">
+                  <span>Progresso</span>
+                  <span className="font-mono font-semibold text-white">{annexCount}/2 salas</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500"
+                    style={{ width: `${(annexCount / 2) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              {annexCount < 2 ? (
+                <button
+                  onClick={() => {
+                    const newCount = annexCount + 1
+                    setAnnexCount(newCount)
+                    publishGalleryState({
+                      annexCount: newCount,
+                      artworks: communityArtworks,
+                    })
+                    setShowExpandModal(false)
+                    if (!isMobile) setTimeout(() => lockPointer(), 100)
+                  }}
+                  className="mb-3 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 py-3 font-semibold text-white transition hover:from-blue-700 hover:to-blue-600"
+                >
+                  ✨ Expandir Agora
+                </button>
+              ) : (
+                <div className="mb-3 rounded-xl bg-amber-950/50 border border-amber-600/30 py-3 text-center text-sm text-amber-200">
+                  🎉 Galeria totalmente expandida!
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  setShowExpandModal(false)
+                  if (!isMobile) setTimeout(() => lockPointer(), 100)
+                }}
+                className="w-full rounded-xl border border-white/20 py-3 font-semibold text-white transition hover:bg-white/10"
+              >
+                Fechar
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ============ MODAL PUBLICAR OBRA ============ */}
+      <AnimatePresence>
+        {showUploadModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => {
+              setShowUploadModal(false)
+              if (!isMobile) setTimeout(() => lockPointer(), 100)
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl bg-neutral-900 p-8 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="mb-4 text-2xl font-semibold text-white">Publicar Obra</h2>
+              <p className="mb-6 text-sm leading-relaxed text-white/70">
+                Caminhe até um quadro vazio nas paredes laterais da galeria e pressione <kbd className="rounded bg-white/10 px-2 py-0.5 font-mono text-xs">E</kbd> para fazer upload da sua imagem.
+              </p>
+
+              <div className="mb-6 space-y-3">
+                <div className="flex items-start gap-3 rounded-lg bg-white/5 p-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                    1
+                  </div>
+                  <div>
+                    <div className="font-medium text-white">Encontre um quadro vazio</div>
+                    <div className="text-xs text-white/60">Nas paredes laterais da galeria</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-lg bg-white/5 p-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                    2
+                  </div>
+                  <div>
+                    <div className="font-medium text-white">Aproxime-se dele</div>
+                    <div className="text-xs text-white/60">Até ver a opção de publicar</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-lg bg-white/5 p-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                    3
+                  </div>
+                  <div>
+                    <div className="font-medium text-white">Pressione E para fazer upload</div>
+                    <div className="text-xs text-white/60">Escolha uma imagem do seu dispositivo</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-6 rounded-lg border border-amber-600/30 bg-amber-950/30 p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-300">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+                  </svg>
+                  Obras Temporárias
+                </div>
+                <p className="text-xs leading-relaxed text-amber-200/80">
+                  Suas obras permanecem visíveis apenas enquanto há visitantes na sala. Quando todos saírem, a exposição recomeça vazia.
+                </p>
+              </div>
+
+              <div className="mb-4 rounded-lg bg-blue-950/30 border border-blue-600/30 p-4">
+                <div className="text-sm font-medium text-blue-200 mb-1">
+                  📊 Obras publicadas: {communityArtworks.length}
+                </div>
+                <div className="text-xs text-blue-200/70">
+                  Quadros disponíveis: {(4 + annexCount * 4) - communityArtworks.length}
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowUploadModal(false)
+                  if (!isMobile) setTimeout(() => lockPointer(), 100)
+                }}
+                className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 py-3 font-semibold text-white transition hover:from-emerald-700 hover:to-emerald-600"
+              >
+                Entendi, vamos lá!
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

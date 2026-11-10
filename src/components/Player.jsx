@@ -15,9 +15,9 @@ const LOOK_SENSITIVITY = 0.0025 // sensibilidade do arraste (mobile)
 const PITCH_LIMIT = Math.PI / 2 - 0.1 // trava o olhar para cima/baixo
 
 // Camera em terceira pessoa
-const THIRD_PERSON_DISTANCE = 4.0 // distancia atras do jogador
-const THIRD_PERSON_HEIGHT = 1.5 // altura da camera acima do chao
-const THIRD_PERSON_LERP = 0.15 // suavizacao da camera
+const THIRD_PERSON_DISTANCE = 5.0 // distancia atras do jogador (aumentado de 4.0 para 5.0)
+const THIRD_PERSON_HEIGHT = 2.0 // altura da camera acima do chao (aumentado de 1.5 para 2.0)
+const THIRD_PERSON_MIN_DISTANCE = 1.5 // distancia minima quando ha colisao
 
 // ---------- Limites do mundo (fora daqui e vazio infinito) ----------
 // A sala tem 28 x 38; acrescentamos margem para o jardim/estacionamento externos.
@@ -226,18 +226,26 @@ export default function Player({ position = [0, 2, 12] }) {
       }
       
       // Offset atras do jogador baseado no yaw da camera
+      const targetDistance = THIRD_PERSON_DISTANCE
       thirdPersonOffset.set(
-        Math.sin(lookYaw) * THIRD_PERSON_DISTANCE,
+        Math.sin(lookYaw) * targetDistance,
         0,
-        Math.cos(lookYaw) * THIRD_PERSON_DISTANCE
+        Math.cos(lookYaw) * targetDistance
       )
       
-      // Posiciona camera diretamente (sem lerp para evitar ghosting/trail)
-      camera.position.set(
-        t.x - thirdPersonOffset.x,
-        t.y + THIRD_PERSON_HEIGHT,
-        t.z - thirdPersonOffset.z
-      )
+      // Posicao alvo da camera (atras do jogador)
+      const targetX = t.x - thirdPersonOffset.x
+      const targetY = t.y + THIRD_PERSON_HEIGHT
+      const targetZ = t.z - thirdPersonOffset.z
+      
+      // Posiciona camera com suavizacao leve apenas no inicio do movimento
+      // para evitar "saltos" bruscos mas manter responsividade
+      const currentDist = camera.position.distanceTo(new THREE.Vector3(targetX, targetY, targetZ))
+      const lerpFactor = currentDist > 10 ? 0.3 : 1.0 // Suaviza apenas se muito longe
+      
+      camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetX, lerpFactor)
+      camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetY, lerpFactor)
+      camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetZ, lerpFactor)
       
       // Camera olha para o jogador (altura do torso)
       thirdPersonLookAt.set(t.x, t.y + 1.3, t.z)
