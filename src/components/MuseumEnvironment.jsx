@@ -369,7 +369,12 @@ export default function MuseumEnvironment() {
       {/* ============ SALAS ANEXAS (v1 apenas) ============ */}
       {hasCommunityGallery &&
         Array.from({ length: annexCount }, (_, i) => (
-          <AnnexRoom key={`annex-${i}`} annexIndex={i + 1} materials={materials} />
+          <AnnexRoom
+            key={`annex-${i}`}
+            annexIndex={i}
+            openNorth={i < annexCount - 1}
+            materials={materials}
+          />
         ))}
     </group>
   )

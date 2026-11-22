@@ -6,6 +6,7 @@ import VersionTimeline from './VersionTimeline'
 import InviteQr from './InviteQr'
 import { generateAppearance, sanitizeNick } from '../systems/appearance'
 import { connectMultiplayer, publishGalleryState } from '../systems/multiplayer'
+import { nextAnnexCount } from '../systems/galleryExpansion'
 import { getVersionById } from '../data/versions'
 
 /**
@@ -21,6 +22,7 @@ export default function UIOverlay() {
   const beginPlaying = useGameStore((s) => s.beginPlaying)
   const closeArtwork = useGameStore((s) => s.closeArtwork)
   const lockPointer = useGameStore((s) => s.lockPointer)
+  const unlockPointer = useGameStore((s) => s.unlockPointer)
   const returnToVersionSelect = useGameStore((s) => s.returnToVersionSelect)
   const setPlayerIdentity = useGameStore((s) => s.setPlayerIdentity)
   const setMpStatus = useGameStore((s) => s.setMpStatus)
@@ -46,10 +48,19 @@ export default function UIOverlay() {
 
   const hasCommunityGallery = activeVersion?.flags?.communityGallery ?? false
   const annexCount = useGameStore((s) => s.annexCount)
-  const setAnnexCount = useGameStore((s) => s.setAnnexCount)
   const communityArtworks = useGameStore((s) => s.communityArtworks)
-  const [showExpandModal, setShowExpandModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+
+  const expandGallery = () => {
+    const state = useGameStore.getState()
+    const next = nextAnnexCount(state.annexCount)
+    if (next === state.annexCount) return
+    state.setAnnexCount(next)
+    publishGalleryState({
+      annexCount: next,
+      artworks: state.communityArtworks,
+    })
+  }
 
   useEffect(() => {
     ensurePlayableVersion?.()
@@ -388,10 +399,13 @@ export default function UIOverlay() {
           {annexCount < 2 && (
             <button
               type="button"
-              onClick={() => {
-                unlockPointer()
-                setShowExpandModal(true)
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                expandGallery()
               }}
+              style={{ touchAction: 'manipulation' }}
               className="pointer-events-auto flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-3 text-sm font-bold text-white shadow-2xl transition-all hover:scale-105 hover:shadow-blue-500/50 active:scale-95"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
@@ -423,80 +437,6 @@ export default function UIOverlay() {
           </button>
         </div>
       )}
-
-      {/* ============ MODAL EXPANDIR GALERIA ============ */}
-      <AnimatePresence>
-        {showExpandModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="pointer-events-auto fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-            onClick={() => {
-              setShowExpandModal(false)
-              if (!isMobile) setTimeout(() => lockPointer(), 100)
-            }}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-md rounded-2xl bg-neutral-900 p-8 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 className="mb-4 text-2xl font-semibold text-white">Expandir Galeria</h2>
-              <p className="mb-6 text-sm leading-relaxed text-white/70">
-                Adicione mais espaço para expor obras comunitárias. Cada expansão cria uma nova sala anexa com 4 quadros adicionais.
-              </p>
-
-              <div className="mb-6 rounded-lg bg-white/5 p-4">
-                <div className="mb-2 flex items-center justify-between text-sm text-white/60">
-                  <span>Progresso</span>
-                  <span className="font-mono font-semibold text-white">{annexCount}/2 salas</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500"
-                    style={{ width: `${(annexCount / 2) * 100}%` }}
-                  />
-                </div>
-              </div>
-
-              {annexCount < 2 ? (
-                <button
-                  onClick={() => {
-                    const newCount = annexCount + 1
-                    setAnnexCount(newCount)
-                    publishGalleryState({
-                      annexCount: newCount,
-                      artworks: communityArtworks,
-                    })
-                    setShowExpandModal(false)
-                    if (!isMobile) setTimeout(() => lockPointer(), 100)
-                  }}
-                  className="mb-3 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 py-3 font-semibold text-white transition hover:from-blue-700 hover:to-blue-600"
-                >
-                  ✨ Expandir Agora
-                </button>
-              ) : (
-                <div className="mb-3 rounded-xl bg-amber-950/50 border border-amber-600/30 py-3 text-center text-sm text-amber-200">
-                  🎉 Galeria totalmente expandida!
-                </div>
-              )}
-
-              <button
-                onClick={() => {
-                  setShowExpandModal(false)
-                  if (!isMobile) setTimeout(() => lockPointer(), 100)
-                }}
-                className="w-full rounded-xl border border-white/20 py-3 font-semibold text-white transition hover:bg-white/10"
-              >
-                Fechar
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ============ MODAL PUBLICAR OBRA ============ */}
       <AnimatePresence>

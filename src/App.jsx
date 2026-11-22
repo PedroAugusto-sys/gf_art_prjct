@@ -9,7 +9,6 @@ import MuseumEnvironment from './components/MuseumEnvironment'
 import PrototypeEnvironment from './components/PrototypeEnvironment'
 import ArtworkFrame from './components/ArtworkFrame'
 import EmptyFrame from './components/EmptyFrame'
-import WallPanel from './components/WallPanel'
 import VisitorLayer, { VisitorFlowTicker } from './components/NPC'
 import DoubleDoor from './components/Door'
 import Parking from './components/Parking'
@@ -19,7 +18,7 @@ import RemotePlayers from './components/RemotePlayers'
 import { GallerySync } from './components/GallerySync'
 import { TemporaryArtworkSession } from './components/TemporaryArtworkSession'
 import artworksData from './data/artworks.json'
-import { HALF_D } from './data/museumLayout'
+import { HALF_D, getCommunityFrameLayouts } from './data/museumLayout'
 import { getVersionById } from './data/versions'
 
 useGLTF.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/')
@@ -36,29 +35,8 @@ export default function App() {
   const artworks = artworksData.artworks || []
   const showRemotes = isStarted && mpReady && !mpOffline
 
-  const communityFrames = hasCommunityGallery
-    ? [
-        // Sala principal - paredes leste e oeste
-        { id: 'community-1', position: [-13.7, 2.2, 0], rotation: [0, 1.5708, 0], size: [2, 1.5] },
-        { id: 'community-2', position: [-13.7, 2.2, 6], rotation: [0, 1.5708, 0], size: [2, 1.5] },
-        { id: 'community-3', position: [13.7, 2.2, 0], rotation: [0, -1.5708, 0], size: [2, 1.5] },
-        { id: 'community-4', position: [13.7, 2.2, 6], rotation: [0, -1.5708, 0], size: [2, 1.5] },
-      ]
-    : []
-
-  // Adiciona 4 quadros por sala anexa (2 por parede lateral)
   const annexCount = useGameStore((s) => s.annexCount)
-  if (hasCommunityGallery && annexCount > 0) {
-    for (let i = 0; i < annexCount; i++) {
-      const annexZ = -19 - (i + 1) * 20 + 10 // Centro da sala anexa
-      communityFrames.push(
-        { id: `annex${i + 1}-1`, position: [-13.7, 2.2, annexZ - 6], rotation: [0, 1.5708, 0], size: [2, 1.5] },
-        { id: `annex${i + 1}-2`, position: [-13.7, 2.2, annexZ], rotation: [0, 1.5708, 0], size: [2, 1.5] },
-        { id: `annex${i + 1}-3`, position: [13.7, 2.2, annexZ - 6], rotation: [0, -1.5708, 0], size: [2, 1.5] },
-        { id: `annex${i + 1}-4`, position: [13.7, 2.2, annexZ], rotation: [0, -1.5708, 0], size: [2, 1.5] }
-      )
-    }
-  }
+  const communityFrames = hasCommunityGallery ? getCommunityFrameLayouts(annexCount) : []
 
   return (
     <div className="fixed inset-0">
@@ -96,10 +74,6 @@ export default function App() {
                 size={frame.size}
               />
             ))}
-
-            {hasCommunityGallery && (
-              <WallPanel position={[0, 2.2, -18.5]} rotation={[0, 0, 0]} />
-            )}
 
             {!prototype && (
               <>

@@ -8,6 +8,7 @@ import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { DEFAULT_APPEARANCE } from '../systems/appearance'
+import { gaitPose } from '../systems/gait'
 
 const STEP_FREQ = 7.4
 
@@ -91,21 +92,17 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
 
     phase.current += dt * (walking ? STEP_FREQ : 1.6)
     const p = phase.current
-    const swing = Math.sin(p) * (walking ? 0.58 : 0.05)
     const bob = Math.abs(Math.sin(p)) * (walking ? 0.032 : 0.006)
+    const pose = gaitPose(p, walking)
 
-    // Pernas: swing positivo = perna para frente (rotation.x > 0 gira para frente)
-    if (leftLeg.current) leftLeg.current.rotation.x = swing
-    if (rightLeg.current) rightLeg.current.rotation.x = -swing
-    // Joelhos: dobram quando a perna vai para frente (flexão natural)
-    if (leftKnee.current) leftKnee.current.rotation.x = Math.max(0, Math.sin(p)) * (walking ? 1.0 : 0.08)
-    if (rightKnee.current) rightKnee.current.rotation.x = Math.max(0, -Math.sin(p)) * (walking ? 1.0 : 0.08)
-    // Braços: movimento oposto às pernas (braço direito para frente quando perna esquerda para frente)
-    if (leftArm.current) leftArm.current.rotation.x = swing * 0.7
-    if (rightArm.current) rightArm.current.rotation.x = -swing * 0.7
-    const eb = walking ? 0.35 : 0.2
-    if (leftElbow.current) leftElbow.current.rotation.x = eb + Math.max(0, swing) * 0.4
-    if (rightElbow.current) rightElbow.current.rotation.x = eb + Math.max(0, -swing) * 0.4
+    if (leftLeg.current) leftLeg.current.rotation.x = pose.leftLegX
+    if (rightLeg.current) rightLeg.current.rotation.x = pose.rightLegX
+    if (leftKnee.current) leftKnee.current.rotation.x = pose.leftKneeX
+    if (rightKnee.current) rightKnee.current.rotation.x = pose.rightKneeX
+    if (leftArm.current) leftArm.current.rotation.x = pose.leftArmX
+    if (rightArm.current) rightArm.current.rotation.x = pose.rightArmX
+    if (leftElbow.current) leftElbow.current.rotation.x = pose.leftElbowX
+    if (rightElbow.current) rightElbow.current.rotation.x = pose.rightElbowX
 
     if (torso.current) {
       torso.current.position.y = bob

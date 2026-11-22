@@ -1,4 +1,5 @@
 import artworksData from './artworks.json'
+import { annexFrameZs, annexRoomBounds, clampAnnexCount } from '../systems/galleryExpansion'
 
 /**
  * Layout do museu em um unico lugar.
@@ -22,15 +23,32 @@ export const HALF_D = ROOM.depth / 2
 export const ANNEX_DEPTH = 20 // profundidade de cada sala anexa
 export const ANNEX_CORRIDOR_WIDTH = 4 // largura do corredor central
 
+/** annexIndex 0 encosta na sala principal. Índices seguintes encadeiam para o norte. */
 export function getAnnexRoomBounds(annexIndex) {
-  const baseZ = -HALF_D - annexIndex * ANNEX_DEPTH
-  return {
-    minX: -HALF_W,
-    maxX: HALF_W,
-    minZ: baseZ - ANNEX_DEPTH,
-    maxZ: baseZ,
-    centerZ: baseZ - ANNEX_DEPTH / 2,
+  return annexRoomBounds(annexIndex, HALF_D, ANNEX_DEPTH, HALF_W)
+}
+
+const MAIN_COMMUNITY_FRAMES = [
+  { id: 'community-1', position: [-13.7, 2.2, 0], rotation: [0, 1.5708, 0], size: [2, 1.5] },
+  { id: 'community-2', position: [-13.7, 2.2, 6], rotation: [0, 1.5708, 0], size: [2, 1.5] },
+  { id: 'community-3', position: [13.7, 2.2, 0], rotation: [0, -1.5708, 0], size: [2, 1.5] },
+  { id: 'community-4', position: [13.7, 2.2, 6], rotation: [0, -1.5708, 0], size: [2, 1.5] },
+]
+
+/** Quadros vazios da sala principal e de cada anexo já aberto. */
+export function getCommunityFrameLayouts(annexCount) {
+  const frames = MAIN_COMMUNITY_FRAMES.map((frame) => ({ ...frame, position: [...frame.position], rotation: [...frame.rotation], size: [...frame.size] }))
+  const count = clampAnnexCount(annexCount)
+  for (let i = 0; i < count; i++) {
+    const [backZ, midZ] = annexFrameZs(i, HALF_D, ANNEX_DEPTH)
+    frames.push(
+      { id: `annex${i + 1}-1`, position: [-13.7, 2.2, backZ], rotation: [0, 1.5708, 0], size: [2, 1.5] },
+      { id: `annex${i + 1}-2`, position: [-13.7, 2.2, midZ], rotation: [0, 1.5708, 0], size: [2, 1.5] },
+      { id: `annex${i + 1}-3`, position: [13.7, 2.2, backZ], rotation: [0, -1.5708, 0], size: [2, 1.5] },
+      { id: `annex${i + 1}-4`, position: [13.7, 2.2, midZ], rotation: [0, -1.5708, 0], size: [2, 1.5] },
+    )
   }
+  return frames
 }
 
 // ---------- Estrutura ----------
