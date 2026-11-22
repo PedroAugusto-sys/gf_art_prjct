@@ -7,6 +7,7 @@ import { useGameStore } from '../store'
 import { playerPosRef } from '../systems/proximityRefs'
 import { publishPose, isMultiplayerConnected, POSE_INTERVAL_MS } from '../systems/multiplayer'
 import VisitorModel from './VisitorModel'
+import { getAnnexRoomBounds } from '../data/museumLayout'
 
 // ---------- Constantes de locomocao ----------
 const WALK_SPEED = 5 // metros/segundo
@@ -21,7 +22,14 @@ const THIRD_PERSON_MIN_DISTANCE = 1.5 // distancia minima quando ha colisao
 
 // ---------- Limites do mundo (fora daqui e vazio infinito) ----------
 // A sala tem 28 x 38; acrescentamos margem para o jardim/estacionamento externos.
-const WORLD_BOUNDS = { minX: -50, maxX: 50, minZ: -30, maxZ: 60 }
+// A segunda sala anexa chega perto de z=-59. Sem essa folga o jogador
+// é teletransportado de volta ao spawn no meio do corredor.
+const WORLD_BOUNDS = {
+  minX: -50,
+  maxX: 50,
+  minZ: Math.min(-30, getAnnexRoomBounds(1).minZ - 4),
+  maxZ: 60,
+}
 const SPAWN_POS = { x: 0, y: 2, z: 12 } // posicao inicial padrao
 
 // Vetores reutilizados (evita alocar objetos a cada frame -> melhor GC/performance)

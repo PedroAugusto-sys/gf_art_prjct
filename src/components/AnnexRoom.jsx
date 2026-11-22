@@ -7,10 +7,16 @@ import { getAnnexRoomBounds, ROOM, ANNEX_CORRIDOR_WIDTH } from '../data/museumLa
  * Sala anexa ao norte da sala principal.
  * Renderizada dinamicamente baseada no annexCount.
  */
-export default function AnnexRoom({ annexIndex, materials }) {
+export default function AnnexRoom({ annexIndex, materials, openNorth = false }) {
   const bounds = useMemo(() => getAnnexRoomBounds(annexIndex), [annexIndex])
 
   const corridorZ = bounds.maxZ + ROOM.wallThickness / 2
+  const roomDepth = Math.abs(bounds.minZ - bounds.maxZ)
+  // O piso e o teto avançam um pouco para dentro da sala anterior,
+  // senão o vão da porta fica sem chão e o jogador vê o céu.
+  const entranceOverlap = 0.6
+  const shellDepth = roomDepth + entranceOverlap
+  const shellCenterZ = bounds.centerZ + entranceOverlap / 2
 
   return (
     <group>
@@ -52,23 +58,23 @@ export default function AnnexRoom({ annexIndex, materials }) {
         <mesh
           material={materials.floor}
           rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, 0.01, bounds.centerZ]}
+          position={[0, 0.01, shellCenterZ]}
           receiveShadow
         >
-          <planeGeometry args={[ROOM.width, Math.abs(bounds.minZ - bounds.maxZ)]} />
+          <planeGeometry args={[ROOM.width, shellDepth]} />
         </mesh>
         <CuboidCollider
-          args={[ROOM.width / 2, 0.1, Math.abs(bounds.minZ - bounds.maxZ) / 2]}
-          position={[0, -0.1, bounds.centerZ]}
+          args={[ROOM.width / 2, 0.1, shellDepth / 2]}
+          position={[0, -0.1, shellCenterZ]}
         />
         
         {/* Teto da sala anexa */}
         <mesh 
           material={materials.ceiling} 
           rotation={[Math.PI / 2, 0, 0]} 
-          position={[0, ROOM.height, bounds.centerZ]}
+          position={[0, ROOM.height, shellCenterZ]}
         >
-          <planeGeometry args={[ROOM.width, Math.abs(bounds.minZ - bounds.maxZ)]} />
+          <planeGeometry args={[ROOM.width, shellDepth]} />
         </mesh>
         
         {/* Faixas luminosas no teto */}
@@ -83,18 +89,42 @@ export default function AnnexRoom({ annexIndex, materials }) {
           </mesh>
         ))}
 
-        {/* Parede norte da sala anexa */}
-        <mesh
-          material={materials.wall}
-          position={[0, ROOM.height / 2, bounds.minZ]}
-          receiveShadow
-        >
-          <boxGeometry args={[ROOM.width, ROOM.height, ROOM.wallThickness]} />
-        </mesh>
-        <CuboidCollider
-          args={[ROOM.width / 2, ROOM.height / 2, ROOM.wallThickness / 2]}
-          position={[0, ROOM.height / 2, bounds.minZ]}
-        />
+        {/* Parede norte: fechada na última sala, com corredor se houver outra depois */}
+        {openNorth ? (
+          [-1, 1].map((side) => {
+            const sideWidth = (ROOM.width - ANNEX_CORRIDOR_WIDTH) / 2
+            const sideX = side * (ANNEX_CORRIDOR_WIDTH / 2 + sideWidth / 2)
+            return (
+              <group key={`annex-north-${side}`}>
+                <mesh
+                  material={materials.wall}
+                  position={[sideX, ROOM.height / 2, bounds.minZ]}
+                  receiveShadow
+                >
+                  <boxGeometry args={[sideWidth, ROOM.height, ROOM.wallThickness]} />
+                </mesh>
+                <CuboidCollider
+                  args={[sideWidth / 2, ROOM.height / 2, ROOM.wallThickness / 2]}
+                  position={[sideX, ROOM.height / 2, bounds.minZ]}
+                />
+              </group>
+            )
+          })
+        ) : (
+          <>
+            <mesh
+              material={materials.wall}
+              position={[0, ROOM.height / 2, bounds.minZ]}
+              receiveShadow
+            >
+              <boxGeometry args={[ROOM.width, ROOM.height, ROOM.wallThickness]} />
+            </mesh>
+            <CuboidCollider
+              args={[ROOM.width / 2, ROOM.height / 2, ROOM.wallThickness / 2]}
+              position={[0, ROOM.height / 2, bounds.minZ]}
+            />
+          </>
+        )}
 
         {/* Paredes laterais da sala anexa */}
         {[-1, 1].map((side) => (
