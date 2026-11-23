@@ -82,10 +82,9 @@ Abra: **http://localhost:5173**
 2. **Movimentação**:
    - Desktop: `WASD` ou setas + mouse
    - Mobile: joystick virtual + toque
-3. **Câmera**: Pressione `V` para alternar 1ª ↔ 3ª pessoa
-4. **Ver obras**: Aproxime-se e pressione `E`
-5. **Publicar obras**: Clique no botão verde flutuante "Publicar Obra"
-6. **Expandir galeria**: Clique no botão azul flutuante "Expandir Galeria"
+3. **Ver obras**: Aproxime-se e pressione `E`
+4. **Publicar obras**: Clique no botão verde flutuante "Publicar Obra"
+5. **Expandir galeria**: Clique no botão azul flutuante "Expandir Galeria"
 
 ---
 

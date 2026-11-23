@@ -5,6 +5,7 @@
  */
 
 import assert from 'node:assert/strict'
+import * as THREE from 'three'
 import {
   MAX_ANNEXES,
   annexFrameZs,
@@ -13,6 +14,23 @@ import {
   nextAnnexCount,
 } from './src/systems/galleryExpansion.js'
 import { gaitPose } from './src/systems/gait.js'
+
+function limbTipZ(hipY, hipRotX, jointY, jointRotX, tipY, tipZ = 0) {
+  const root = new THREE.Group()
+  const hip = new THREE.Group()
+  hip.position.y = hipY
+  hip.rotation.x = hipRotX
+  const joint = new THREE.Group()
+  joint.position.y = jointY
+  joint.rotation.x = jointRotX
+  const tip = new THREE.Group()
+  tip.position.set(0, tipY, tipZ)
+  joint.add(tip)
+  hip.add(joint)
+  root.add(hip)
+  root.updateWorldMatrix(true, true)
+  return tip.getWorldPosition(new THREE.Vector3()).z
+}
 
 const HALF_D = 19
 const ANNEX_DEPTH = 20
@@ -70,19 +88,24 @@ test('os quadros da sala anexa ficam dentro dela', () => {
 
 console.log('passo dos braços')
 
-test('braços balançam no sentido oposto às pernas do mesmo lado', () => {
-  const forward = gaitPose(Math.PI / 2, true)
-  assert.ok(forward.leftLegX > 0)
-  assert.ok(forward.rightLegX < 0)
-  assert.ok(forward.leftArmX < 0)
-  assert.ok(forward.rightArmX > 0)
-  assert.notEqual(Math.sign(forward.leftArmX), Math.sign(forward.leftLegX))
-  assert.notEqual(Math.sign(forward.rightArmX), Math.sign(forward.rightLegX))
+test('braço esquerdo vai à frente junto com a perna direita', () => {
+  const pose = gaitPose(Math.PI / 2, true)
+  const leftFoot = limbTipZ(0.9, pose.leftLegX, -0.45, pose.leftKneeX, -0.38, 0.06)
+  const rightFoot = limbTipZ(0.9, pose.rightLegX, -0.45, pose.rightKneeX, -0.38, 0.06)
+  const leftHand = limbTipZ(1.43, pose.leftArmX, -0.25, pose.leftElbowX, -0.25)
+  const rightHand = limbTipZ(1.43, pose.rightArmX, -0.25, pose.rightElbowX, -0.25)
+  assert.ok(rightFoot > leftFoot, 'perna direita à frente')
+  assert.ok(leftHand > rightHand, 'braço esquerdo à frente')
+  assert.ok(leftHand > 0, 'mão esquerda na frente do tronco')
+  assert.ok(rightFoot > 0, 'pé direito na frente do tronco')
 
-  const back = gaitPose(-Math.PI / 2, true)
-  assert.ok(back.leftLegX < 0)
-  assert.ok(back.leftArmX > 0)
-  assert.ok(back.rightArmX < 0)
+  const other = gaitPose(-Math.PI / 2, true)
+  const leftFootBack = limbTipZ(0.9, other.leftLegX, -0.45, other.leftKneeX, -0.38, 0.06)
+  const rightFootBack = limbTipZ(0.9, other.rightLegX, -0.45, other.rightKneeX, -0.38, 0.06)
+  const leftHandBack = limbTipZ(1.43, other.leftArmX, -0.25, other.leftElbowX, -0.25)
+  const rightHandBack = limbTipZ(1.43, other.rightArmX, -0.25, other.rightElbowX, -0.25)
+  assert.ok(leftFootBack > rightFootBack)
+  assert.ok(rightHandBack > leftHandBack)
 })
 
 test('em repouso os braços continuam opostos às pernas, com amplitude pequena', () => {

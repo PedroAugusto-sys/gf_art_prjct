@@ -60,7 +60,7 @@ export function BlobShadow({ target }) {
 }
 
 function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion, headPitch = 0, hideHead = false, headLook }) {
-  const torso = useRef(null)
+  const body = useRef(null)
   const head = useRef(null)
   const leftLeg = useRef(null)
   const rightLeg = useRef(null)
@@ -104,9 +104,9 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
     if (leftElbow.current) leftElbow.current.rotation.x = pose.leftElbowX
     if (rightElbow.current) rightElbow.current.rotation.x = pose.rightElbowX
 
-    if (torso.current) {
-      torso.current.position.y = bob
-      torso.current.rotation.z = viewing ? Math.sin(time * 0.6) * 0.03 : 0
+    if (body.current) {
+      body.current.position.y = bob
+      body.current.rotation.z = viewing ? Math.sin(time * 0.6) * 0.03 : 0
     }
     if (head.current) {
       // Se headLook está disponível (jogador local), usa o look da câmera
@@ -124,61 +124,48 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
   })
 
   return (
-    <group>
-      <group ref={torso}>
-        {/* Pelvis e torso - esconder em 1ª pessoa para evitar clipping */}
-        {!hideHead && (
-          <>
-            <mesh geometry={GEO.pelvis} material={mats.pants} position={[0, 0.95, 0]} />
-            <mesh geometry={GEO.torso} material={mats.shirt} position={[0, 1.26, 0]} />
-            {outfit === 'dress' && (
-              <mesh geometry={GEO.skirt} material={mats.outerwear} position={[0, 0.86, 0]} />
-            )}
-            {outfit === 'coat' && (
-              <mesh geometry={GEO.coat} material={mats.outerwear} position={[0, 1.06, 0]} />
-            )}
-            <mesh geometry={GEO.joint} material={mats.shirt} position={[-0.19, 1.44, 0]} />
-            <mesh geometry={GEO.joint} material={mats.shirt} position={[0.19, 1.44, 0]} />
-            <mesh geometry={GEO.neck} material={mats.skin} position={[0, 1.55, 0]} />
-          </>
-        )}
-        {/* Head - sempre esconder em 1ª pessoa */}
-        {!hideHead && (
-          <group ref={head} position={[0, 1.68, 0]}>
-            <mesh geometry={GEO.head} material={mats.skin} />
-            <mesh geometry={GEO.hair} material={mats.hair} position={[0, 0.012, 0]} />
-          </group>
-        )}
-        {/* Braços - esconder em 1ª pessoa */}
-        {!hideHead && (
-          <>
-            <group ref={leftArm} position={[-0.21, 1.43, 0]}>
-              <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
-              <group ref={leftElbow} position={[0, -0.25, 0]}>
-                <mesh geometry={GEO.foreArm} material={mats.skin} position={[0, -0.12, 0]} />
-                <mesh geometry={GEO.hand} material={mats.skin} position={[0, -0.25, 0]} />
-              </group>
-            </group>
-            <group ref={rightArm} position={[0.21, 1.43, 0]}>
-              <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
-              <group ref={rightElbow} position={[0, -0.25, 0]}>
-                <mesh geometry={GEO.foreArm} material={mats.skin} position={[0, -0.12, 0]} />
-                <mesh geometry={GEO.hand} material={mats.skin} position={[0, -0.25, 0]} />
-              </group>
-            </group>
-          </>
-        )}
+    <group ref={body} name="visitor-body">
+      <mesh geometry={GEO.pelvis} material={mats.pants} position={[0, 0.95, 0]} />
+      <mesh geometry={GEO.torso} material={mats.shirt} position={[0, 1.26, 0]} />
+      {outfit === 'dress' && (
+        <mesh geometry={GEO.skirt} material={mats.outerwear} position={[0, 0.86, 0]} />
+      )}
+      {outfit === 'coat' && (
+        <mesh geometry={GEO.coat} material={mats.outerwear} position={[0, 1.06, 0]} />
+      )}
+      <mesh geometry={GEO.joint} material={mats.shirt} position={[-0.19, 1.44, 0]} />
+      <mesh geometry={GEO.joint} material={mats.shirt} position={[0.19, 1.44, 0]} />
+      {!hideHead && (
+        <mesh geometry={GEO.neck} material={mats.skin} position={[0, 1.55, 0]} />
+      )}
+      {!hideHead && (
+        <group ref={head} position={[0, 1.68, 0]}>
+          <mesh geometry={GEO.head} material={mats.skin} />
+          <mesh geometry={GEO.hair} material={mats.hair} position={[0, 0.012, 0]} />
+        </group>
+      )}
+      <group ref={leftArm} name="left-arm" position={[-0.21, 1.43, 0]}>
+        <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
+        <group ref={leftElbow} position={[0, -0.25, 0]}>
+          <mesh geometry={GEO.foreArm} material={mats.skin} position={[0, -0.12, 0]} />
+          <mesh geometry={GEO.hand} material={mats.skin} position={[0, -0.25, 0]} />
+        </group>
       </group>
-
-      {/* Pernas - sempre visíveis (mesmo em 1ª pessoa, ficam abaixo da câmera) */}
-      <group ref={leftLeg} position={[-0.1, 0.9, 0]}>
+      <group ref={rightArm} name="right-arm" position={[0.21, 1.43, 0]}>
+        <mesh geometry={GEO.upperArm} material={mats.shirt} position={[0, -0.125, 0]} />
+        <group ref={rightElbow} position={[0, -0.25, 0]}>
+          <mesh geometry={GEO.foreArm} material={mats.skin} position={[0, -0.12, 0]} />
+          <mesh geometry={GEO.hand} material={mats.skin} position={[0, -0.25, 0]} />
+        </group>
+      </group>
+      <group ref={leftLeg} name="left-leg" position={[-0.1, 0.9, 0]}>
         <mesh geometry={GEO.thigh} material={mats.pants} position={[0, -0.22, 0]} />
         <group ref={leftKnee} position={[0, -0.45, 0]}>
           <mesh geometry={GEO.shin} material={mats.pants} position={[0, -0.18, 0]} />
           <mesh geometry={GEO.foot} material={mats.shoes} position={[0, -0.38, 0.06]} />
         </group>
       </group>
-      <group ref={rightLeg} position={[0.1, 0.9, 0]}>
+      <group ref={rightLeg} name="right-leg" position={[0.1, 0.9, 0]}>
         <mesh geometry={GEO.thigh} material={mats.pants} position={[0, -0.22, 0]} />
         <group ref={rightKnee} position={[0, -0.45, 0]}>
           <mesh geometry={GEO.shin} material={mats.pants} position={[0, -0.18, 0]} />
