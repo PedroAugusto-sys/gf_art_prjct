@@ -4,8 +4,11 @@ import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { Html } from '@react-three/drei'
 import { publishGalleryState, isRoomHost, isMultiplayerOffline } from '../systems/multiplayer'
-import { uploadArtwork, deleteArtwork, reportArtwork, getSessionToken } from '../systems/temporaryArtworks'
+import { deleteArtwork, reportArtwork, getSessionToken } from '../systems/temporaryArtworks'
 import { registerEmptyFrame } from '../systems/artworkTargets'
+import { useFrameTexture } from '../hooks/useFrameTexture'
+import PublishForm from './PublishForm'
+import { getStableAuthorId } from '../systems/publishFrame'
 
 const FRAME_MATERIAL = new THREE.MeshStandardMaterial({
   color: '#2b2b2b',
@@ -15,82 +18,17 @@ const FRAME_MATERIAL = new THREE.MeshStandardMaterial({
 const _framePos = new THREE.Vector3()
 
 /**
- * Comprime e converte imagem para WebP (melhor compressão que JPEG)
- * Redimensiona para max 480px no lado maior
- * @returns {Promise<string>} data URL em formato WebP comprimido
- */
-async function resizeImageToWebP(file, maxSize = 480) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const img = new Image()
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          reject(new Error('Canvas context not available'))
-          return
-        }
-
-        const scale = Math.min(1, maxSize / Math.max(img.width, img.height))
-        canvas.width = Math.round(img.width * scale)
-        canvas.height = Math.round(img.height * scale)
-
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              reject(new Error('Failed to create blob'))
-              return
-            }
-            const webpReader = new FileReader()
-            webpReader.onloadend = () => resolve(webpReader.result)
-            webpReader.onerror = reject
-            webpReader.readAsDataURL(blob)
-          },
-          'image/webp',
-          0.75 // Qualidade WebP (75% = bom balanço qualidade/tamanho)
-        )
-      }
-      img.onerror = reject
-      img.src = e.target.result
-    }
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
-/**
- * Gera ID estável do autor baseado em dados do navegador
- */
-function getStableAuthorId() {
-  let authorId = localStorage.getItem('gf-author-id')
-  if (!authorId) {
-    authorId = `author-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    localStorage.setItem('gf-author-id', authorId)
-  }
-  return authorId
-}
-
-/**
  * Quadro vazio para galeria comunitária.
  * Permite upload de imagem para publicação na sala.
  */
 export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameId }) {
   const [hovered, setHovered] = useState(false)
   const [showUploadUI, setShowUploadUI] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [title, setTitle] = useState('')
-  const [uploadError, setUploadError] = useState('')
   const [showTitle, setShowTitle] = useState(false)
-  const [artworkTexture, setArtworkTexture] = useState(null)
   const meshRef = useRef(null)
   const matRef = useRef(null)
-  const fileInputRef = useRef(null)
 
   const communityArtworks = useGameStore((s) => s.communityArtworks)
-  const addCommunityArtwork = useGameStore((s) => s.addCommunityArtwork)
   const updateCommunityArtwork = useGameStore((s) => s.updateCommunityArtwork)
   const publishFrameId = useGameStore((s) => s.publishFrameId)
   const playerName = useGameStore((s) => s.playerName)
@@ -114,49 +52,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   )
   const canEdit = !artwork || isOwner || isHost
 
-  // Carrega textura quando artwork muda
-  useEffect(() => {
-    // Suporta tanto data URLs (sistema antigo) quanto URLs externas (novo sistema)
-    const imageUrl = artwork?.url || artwork?.dataUrl
-    
-    if (!imageUrl) {
-      setArtworkTexture(null)
-      return
-    }
-    
-    // Carrega URL como textura usando Image
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    
-    img.onload = () => {
-      const texture = new THREE.Texture(img)
-      texture.colorSpace = THREE.SRGBColorSpace
-      texture.minFilter = THREE.LinearFilter
-      texture.magFilter = THREE.LinearFilter
-      texture.needsUpdate = true
-      setArtworkTexture(texture)
-    }
-    
-    img.onerror = (err) => {
-      console.error('Error loading artwork texture:', err)
-      setArtworkTexture(null)
-    }
-    
-    // URL completa se começa com http, senão assume relativo ao servidor
-    const fullUrl = imageUrl.startsWith('http') || imageUrl.startsWith('data:') 
-      ? imageUrl 
-      : `${import.meta.env.VITE_ART_SERVER_URL || 'http://localhost:3001'}${imageUrl}`
-    
-    img.src = fullUrl
-    
-    // Cleanup
-    return () => {
-      if (img) {
-        img.onload = null
-        img.onerror = null
-      }
-    }
-  }, [artwork?.dataUrl, artwork?.url])
+  const artworkTexture = useFrameTexture(artwork, width, height, matRef)
 
   const handleInteract = () => {
     if (!canEdit || artwork) return
@@ -168,9 +64,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const closeModal = () => {
     setShowUploadUI(false)
     useGameStore.getState().setFrameComposerOpen(false)
-    setTitle('')
-    setUploadError('')
-    setUploading(false)
     if (!isMobile) {
       // Pequeno delay para evitar race condition com pointer lock
       setTimeout(() => {
@@ -184,6 +77,8 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     if (!mesh) return
     mesh.userData.emptyFrameId = frameId
     mesh.userData.filled = !!artwork
+    mesh.userData.published = !!artwork
+    mesh.userData.example = false
     if (artwork) {
       mesh.userData.artwork = {
         id: artwork.id || frameId,
@@ -191,7 +86,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         artist: artwork.author || playerName || 'Visitante',
         year: '',
         description: 'Obra publicada nesta sala.',
-        imagePath: artwork.url || artwork.dataUrl || '',
+        imagePath: artwork.dataUrl || artwork.url || '',
       }
     } else {
       mesh.userData.artwork = null
@@ -253,112 +148,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     handleInteract()
   }
 
-  const handleFileSelect = async (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (!file.type.startsWith('image/')) {
-      setUploadError('Por favor selecione uma imagem')
-      return
-    }
-
-    setUploading(true)
-    setUploadError('')
-
-    try {
-      // Usa novo sistema de upload temporário se token disponível
-      if (sessionToken) {
-        const uploadedArtwork = await uploadArtwork(file, frameId, title.trim() || 'Sem título')
-        
-        // Cria objeto compatível com sistema antigo
-        const newArtwork = {
-          id: uploadedArtwork.id,
-          frameId: uploadedArtwork.frameId,
-          dataUrl: null, // URL externa, não data URL
-          url: uploadedArtwork.url, // URL do servidor
-          title: uploadedArtwork.title,
-          author: uploadedArtwork.author,
-          authorId, // Mantém para compatibilidade
-          authorToken: sessionToken, // Novo campo para ownership
-          timestamp: uploadedArtwork.timestamp,
-          isTemporary: true // Flag para indicar que é temporário
-        }
-
-        // Atualiza store local
-        if (artwork) {
-          updateCommunityArtwork(artwork.id, newArtwork)
-        } else {
-          addCommunityArtwork(newArtwork)
-        }
-
-        // Publica no Playroom (para sync multiplayer)
-        const updatedArtworks = artwork
-          ? communityArtworks.map((art) => (art.id === artwork.id ? newArtwork : art))
-          : [...communityArtworks, newArtwork]
-
-        publishGalleryState({
-          annexCount: useGameStore.getState().annexCount,
-          artworks: updatedArtworks,
-        })
-
-        closeModal()
-        setUploading(false)
-        return
-      }
-
-      // Fallback: sistema antigo com data URLs (se servidor indisponível)
-      const dataUrl = await resizeImageToWebP(file, 480)
-
-      const newArtwork = {
-        id: artwork?.id || `community-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        frameId,
-        dataUrl,
-        title: title.trim() || 'Sem título',
-        author: playerName || 'Anônimo',
-        authorId,
-        timestamp: Date.now(),
-      }
-
-      // Salva no localStorage como backup
-      try {
-        const backup = JSON.parse(localStorage.getItem('gf-my-artworks') || '[]')
-        const existing = backup.findIndex((art) => art.frameId === frameId)
-        if (existing >= 0) backup[existing] = newArtwork
-        else backup.push(newArtwork)
-        localStorage.setItem('gf-my-artworks', JSON.stringify(backup))
-      } catch {
-        // Falha silenciosa - localStorage pode estar desabilitado
-      }
-
-      // Atualiza store local IMEDIATAMENTE (para o publisher ver)
-      if (artwork) {
-        updateCommunityArtwork(artwork.id, newArtwork)
-      } else {
-        addCommunityArtwork(newArtwork)
-      }
-
-      // Publica no Playroom (sync para outros jogadores)
-      const updatedArtworks = artwork
-        ? communityArtworks.map((art) => (art.id === artwork.id ? newArtwork : art))
-        : [...communityArtworks, newArtwork]
-
-      publishGalleryState({
-        annexCount: useGameStore.getState().annexCount,
-        artworks: updatedArtworks,
-      })
-
-      closeModal()
-      setUploading(false)
-    } catch (err) {
-      // Log apenas se for um erro real de processamento (não de rede/offline)
-      if (err?.message && !err.message.includes('network') && !err.message.includes('offline')) {
-        console.error('Error processing image:', err)
-      }
-      setUploadError(err.message || 'Erro ao processar imagem. Tente novamente.')
-      setUploading(false)
-    }
-  }
-
   return (
     <group position={position} rotation={rotation}>
       <mesh material={FRAME_MATERIAL} castShadow>
@@ -394,135 +183,10 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
 
       {showUploadUI && (
         <Html center distanceFactor={5} style={{ pointerEvents: 'auto' }}>
-          <div
-            style={{
-              background: 'rgba(20,20,20,0.95)',
-              color: 'white',
-              padding: '24px',
-              borderRadius: '12px',
-              width: '320px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-              backdropFilter: 'blur(8px)',
-            }}
-          >
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 600 }}>
-              {artwork ? 'Substituir obra' : 'Publicar obra aqui'}
-            </h3>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label
-                style={{
-                  display: 'block',
-                  marginBottom: '6px',
-                  fontSize: '13px',
-                  opacity: 0.8,
-                }}
-              >
-                Título da obra
-              </label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Dê um nome à sua obra"
-                disabled={uploading}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  background: 'rgba(255,255,255,0.1)',
-                  color: 'white',
-                  fontSize: '14px',
-                  outline: 'none',
-                }}
-              />
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileSelect}
-              disabled={uploading}
-              style={{ display: 'none' }}
-            />
-
-            {uploadError && (
-              <div
-                style={{
-                  marginBottom: '12px',
-                  padding: '8px',
-                  background: 'rgba(220,38,38,0.2)',
-                  border: '1px solid rgba(220,38,38,0.3)',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                  color: '#fca5a5',
-                }}
-              >
-                {uploadError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  background: uploading ? '#555' : '#fff',
-                  color: '#000',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  cursor: uploading ? 'not-allowed' : 'pointer',
-                  opacity: uploading ? 0.6 : 1,
-                }}
-              >
-                {uploading ? 'Processando...' : 'Escolher imagem'}
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  closeModal()
-                }}
-                disabled={uploading}
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: '6px',
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  background: 'transparent',
-                  color: 'white',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  cursor: uploading ? 'not-allowed' : 'pointer',
-                  opacity: uploading ? 0.6 : 1,
-                }}
-              >
-                Cancelar
-              </button>
-            </div>
-
-            <div
-              style={{
-                marginTop: '12px',
-                fontSize: '11px',
-                opacity: 0.7,
-                textAlign: 'center',
-                padding: '8px',
-                background: 'rgba(251,191,36,0.1)',
-                border: '1px solid rgba(251,191,36,0.3)',
-                borderRadius: '6px',
-                color: '#fbbf24'
-              }}
-            >
-              ⏱️ <strong>Obra temporária:</strong> permanece apenas enquanto há visitantes na sala. Quando todos saírem, a exposição recomeça vazia.
-            </div>
-          </div>
+          <PublishForm frameId={frameId} existing={artwork} onClose={closeModal} />
         </Html>
       )}
+
 
       {artwork && showTitle && (
         <Html position={[0, -height / 2 - 0.3, FRAME_DEPTH]} center distanceFactor={10}>

@@ -1,4 +1,4 @@
-import { ART_VIEWING_SPOTS, IDLE_SPOTS, HALF_D, getCommunityFrameLayouts } from '../data/museumLayout'
+import { ART_VIEWING_SPOTS, IDLE_SPOTS, HALF_D, getCommunityFrameLayouts } from '../data/museumLayout.js'
 
 /**
  * Coordenacao da multidao, fora do React (nenhum re-render por frame).
@@ -119,6 +119,14 @@ export function updateAgent(npcId, x, z) {
 export function removeAgent(npcId) {
   agents.delete(npcId)
   releaseSpot(npcId)
+}
+
+/** Limpa reservas. Usado pela simulação de navegação. */
+export function resetCrowd() {
+  reservedBy.clear()
+  agents.clear()
+  viewingSpots = ART_VIEWING_SPOTS
+  idleSpots = IDLE_SPOT_LIST
 }
 
 /**

@@ -6,6 +6,7 @@
   "artworks": [
     {
       "id": "obra-01",
+      "example": true,
       "imagePath": "/assets/artworks/obra-01.jpg",
       "title": "A Noite Estrelada (exemplo)",
       "artist": "Vincent van Gogh",
@@ -17,6 +18,7 @@
     },
     {
       "id": "obra-02",
+      "example": true,
       "imagePath": "/assets/artworks/obra-02.jpg",
       "title": "Retrato (exemplo)",
       "artist": "Artista Desconhecido",
@@ -28,6 +30,7 @@
     },
     {
       "id": "obra-03",
+      "example": true,
       "imagePath": "/assets/artworks/obra-03.jpg",
       "title": "Paisagem (exemplo)",
       "artist": "Artista Desconhecido",
@@ -39,6 +42,7 @@
     },
     {
       "id": "obra-04",
+      "example": true,
       "imagePath": "/assets/artworks/obra-04.jpg",
       "title": "Abstrato (exemplo)",
       "artist": "Artista Desconhecido",
@@ -50,6 +54,7 @@
     },
     {
       "id": "obra-05",
+      "example": true,
       "imagePath": "/assets/artworks/obra-05.jpg",
       "title": "Escultura em Tela (exemplo)",
       "artist": "Artista Desconhecido",
@@ -61,6 +66,7 @@
     },
     {
       "id": "obra-06",
+      "example": true,
       "imagePath": "/assets/artworks/obra-06.jpg",
       "title": "Contemporaneo (exemplo)",
       "artist": "Artista Desconhecido",

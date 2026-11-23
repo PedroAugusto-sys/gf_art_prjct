@@ -125,19 +125,34 @@ export const useGameStore = create((set, get) => ({
   // pelo ArtworkFocus sem re-renderizar o mundo 3D (usa setState seletivo).
   focusedArtwork: null,
   focusedEmptyFrameId: null,
+  focusedExampleArtwork: null,
   publishFrameId: null,
   frameComposerOpen: false,
   setFocusedArtwork: (artwork) => {
     const empty = artwork ? null : get().focusedEmptyFrameId
-    if (get().focusedArtwork !== artwork || get().focusedEmptyFrameId !== empty) {
-      set({ focusedArtwork: artwork, focusedEmptyFrameId: empty })
+    const example = artwork ? null : get().focusedExampleArtwork
+    if (
+      get().focusedArtwork !== artwork ||
+      get().focusedEmptyFrameId !== empty ||
+      get().focusedExampleArtwork !== example
+    ) {
+      set({ focusedArtwork: artwork, focusedEmptyFrameId: empty, focusedExampleArtwork: example })
     }
   },
-  setFocusTarget: (artwork, emptyFrameId) => {
+  setFocusTarget: (artwork, emptyFrameId, exampleArtwork = null) => {
     const nextArt = artwork || null
     const nextEmpty = nextArt ? null : (emptyFrameId || null)
-    if (get().focusedArtwork === nextArt && get().focusedEmptyFrameId === nextEmpty) return
-    set({ focusedArtwork: nextArt, focusedEmptyFrameId: nextEmpty })
+    const nextExample = nextArt ? null : (exampleArtwork || null)
+    if (
+      get().focusedArtwork === nextArt &&
+      get().focusedEmptyFrameId === nextEmpty &&
+      get().focusedExampleArtwork === nextExample
+    ) return
+    set({
+      focusedArtwork: nextArt,
+      focusedEmptyFrameId: nextEmpty,
+      focusedExampleArtwork: nextExample,
+    })
   },
   requestPublishOnFrame: (frameId) => set({ publishFrameId: frameId || null }),
   clearPublishRequest: () => set({ publishFrameId: null }),
@@ -210,6 +225,7 @@ export const useGameStore = create((set, get) => ({
       selectedArtwork: null,
       focusedArtwork: null,
       focusedEmptyFrameId: null,
+      focusedExampleArtwork: null,
       publishFrameId: null,
       frameComposerOpen: false,
       isPointerLocked: false,

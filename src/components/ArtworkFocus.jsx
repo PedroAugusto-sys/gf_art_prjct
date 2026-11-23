@@ -39,13 +39,29 @@ export default function ArtworkFocus() {
   const emptyRef = useRef(null)
   const frameCount = useRef(0)
 
-  const applyFocus = (artwork, emptyFrameId) => {
+  const exampleRef = useRef(null)
+
+  const applyFocus = (artwork, emptyFrameId, exampleArtwork) => {
     const nextArt = artwork || null
     const nextEmpty = nextArt ? null : (emptyFrameId || null)
-    if (focusedRef.current === nextArt && emptyRef.current === nextEmpty) return
+    const nextExample = nextArt ? null : (exampleArtwork || null)
+    if (
+      focusedRef.current === nextArt &&
+      emptyRef.current === nextEmpty &&
+      exampleRef.current === nextExample
+    ) return
     focusedRef.current = nextArt
     emptyRef.current = nextEmpty
-    setFocus(nextArt, nextEmpty)
+    exampleRef.current = nextExample
+    setFocus(nextArt, nextEmpty, nextExample)
+  }
+
+  const focusFromMesh = (data) => {
+    if (data?.published && data.artwork) applyFocus(data.artwork, null, null)
+    else if (data?.emptyFrameId && !data.filled) {
+      applyFocus(null, data.emptyFrameId, data.example ? data.artwork : null)
+    } else if (data?.artwork) applyFocus(data.artwork, null, null)
+    else applyFocus(null, null, null)
   }
 
   useFrame(() => {
@@ -53,7 +69,7 @@ export default function ArtworkFocus() {
 
     // Nao detecta nada enquanto modal aberto ou jogo nao iniciado
     if (!isStarted || selectedArtwork || frameComposerOpen) {
-      if (focusedRef.current || emptyRef.current) applyFocus(null, null)
+      if (focusedRef.current || emptyRef.current) applyFocus(null, null, null)
       return
     }
 
@@ -76,14 +92,11 @@ export default function ArtworkFocus() {
         }
       }
 
-      const data = nearest?.userData
-      if (data?.artwork) applyFocus(data.artwork, null)
-      else if (data?.emptyFrameId && !data.filled) applyFocus(null, data.emptyFrameId)
-      else applyFocus(null, null)
+      focusFromMesh(nearest?.userData)
     } else {
       // ---- Desktop: raycast pela mira ----
       if (!isPointerLocked) {
-        if (focusedRef.current || emptyRef.current) applyFocus(null, null)
+        if (focusedRef.current || emptyRef.current) applyFocus(null, null, null)
         return
       }
       if (frameCount.current % RAYCAST_EVERY !== 0) return
@@ -93,14 +106,11 @@ export default function ArtworkFocus() {
 
       const meshes = [...getArtworkTargets().values(), ...getEmptyFrameTargets().values()].filter((mesh) => mesh && isShown(mesh))
       if (meshes.length === 0) {
-        if (focusedRef.current || emptyRef.current) applyFocus(null, null)
+        if (focusedRef.current || emptyRef.current) applyFocus(null, null, null)
         return
       }
       const hits = _raycaster.intersectObjects(meshes, false)
-      const data = hits[0]?.object?.userData
-      if (data?.artwork) applyFocus(data.artwork, null)
-      else if (data?.emptyFrameId && !data.filled) applyFocus(null, data.emptyFrameId)
-      else applyFocus(null, null)
+      focusFromMesh(hits[0]?.object?.userData)
     }
   })
 
@@ -115,10 +125,22 @@ export default function ArtworkFocus() {
       }
       if (emptyRef.current) {
         useGameStore.getState().requestPublishOnFrame(emptyRef.current)
+        return
       }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const onViewExample = (e) => {
+      if ((e.key !== 'v' && e.key !== 'V') || !isPointerLocked || focusedRef.current) return
+      const example = exampleRef.current
+      if (!example) return
+      useGameStore.getState().unlockPointer()
+      openArtwork(example)
+    }
+    window.addEventListener('keydown', onViewExample)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onViewExample)
+    }
   }, [isPointerLocked, openArtwork])
 
   return null

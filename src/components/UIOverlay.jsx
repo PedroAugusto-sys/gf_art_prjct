@@ -18,6 +18,7 @@ export default function UIOverlay() {
   const selectedArtwork = useGameStore((s) => s.selectedArtwork)
   const focusedArtwork = useGameStore((s) => s.focusedArtwork)
   const focusedEmptyFrameId = useGameStore((s) => s.focusedEmptyFrameId)
+  const focusedExampleArtwork = useGameStore((s) => s.focusedExampleArtwork)
   const frameComposerOpen = useGameStore((s) => s.frameComposerOpen)
   const isPointerLocked = useGameStore((s) => s.isPointerLocked)
   const beginPlaying = useGameStore((s) => s.beginPlaying)
@@ -281,8 +282,23 @@ export default function UIOverlay() {
         </div>
       )}
       {isStarted && !selectedArtwork && !frameComposerOpen && !isMobile && isPointerLocked && !focusedArtwork && focusedEmptyFrameId && (
-        <div className="absolute left-1/2 top-[54%] -translate-x-1/2 rounded-full bg-black/55 px-5 py-1.5 text-sm text-white/90 backdrop-blur-sm">
-          Pressione E para publicar uma obra aqui
+        <div className="absolute left-1/2 top-[54%] flex -translate-x-1/2 items-center gap-2">
+          <div className="rounded-full bg-black/55 px-5 py-1.5 text-sm text-white/90 backdrop-blur-sm">
+            Pressione E para publicar uma obra aqui
+          </div>
+          {focusedExampleArtwork && (
+            <button
+              type="button"
+              onClick={() => {
+                artworkOpenedAt.current = performance.now()
+                useGameStore.getState().openArtwork(focusedExampleArtwork)
+              }}
+              className="pointer-events-auto rounded-full bg-black/55 px-3 py-1.5 text-sm text-white/90 backdrop-blur-sm"
+            >
+              <span className="mr-1 rounded border border-white/50 bg-white/10 px-1.5 py-0.5 font-mono text-xs">V</span>
+              Ver exemplo
+            </button>
+          )}
         </div>
       )}
 
@@ -312,6 +328,21 @@ export default function UIOverlay() {
             >
               Publicar obra aqui
             </button>
+            {focusedExampleArtwork && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  artworkOpenedAt.current = performance.now()
+                  useGameStore.getState().openArtwork(focusedExampleArtwork)
+                }}
+                style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                className="mt-2 flex items-center gap-2 rounded-2xl bg-black/70 px-5 py-3 text-sm font-semibold text-white shadow-2xl"
+              >
+                Ver exemplo
+              </button>
+            )}
           </motion.div>
         )}
         {isStarted && !selectedArtwork && isMobile && focusedArtwork && (
