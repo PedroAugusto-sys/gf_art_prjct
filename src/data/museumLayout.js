@@ -1,5 +1,5 @@
-import artworksData from './artworks.json'
-import { annexFrameZs, annexRoomBounds, clampAnnexCount } from '../systems/galleryExpansion'
+import artworksData from './artworks.json' with { type: 'json' }
+import { annexFrameZs, annexRoomBounds, clampAnnexCount } from '../systems/galleryExpansion.js'
 
 /**
  * Layout do museu em um unico lugar.

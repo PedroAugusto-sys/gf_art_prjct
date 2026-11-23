@@ -10,7 +10,7 @@ import {
   removeAgent,
   separationForce,
 } from '../systems/crowd'
-import { findPath } from '../systems/navgrid'
+import { findPath, isWalkable, nearestWalkable } from '../systems/navgrid'
 import { useVisitorStore } from '../systems/visitorFlow'
 import { npcPosMap } from '../systems/proximityRefs'
 import { sim, advanceSim } from '../systems/simClock'
@@ -424,14 +424,18 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
       position.x = Math.max(WALK_BOUNDS.minX, Math.min(WALK_BOUNDS.maxX, position.x))
 
       // Versao inicial: sempre clampa Z (recria a armadilha na porta).
-      // Versao atual: libera o corredor ao sair.
+      // Versao atual: a grade inclui os anexos abertos e libera a porta na saída.
       const legacy = isLegacyNpcs()
       const isSaindo = state.mode === 'leaving' || state.mode === 'exiting'
       const nearDoor =
         Math.abs(position.x - DOOR_LEFT_X) < DOOR_CORRIDOR_W ||
         Math.abs(position.x - DOOR_RIGHT_X) < DOOR_CORRIDOR_W
-      if (legacy || !(isSaindo && nearDoor)) {
+      if (legacy) {
         position.z = Math.max(WALK_BOUNDS.minZ, Math.min(WALK_BOUNDS.maxZ, position.z))
+      } else if (!(isSaindo && nearDoor) && !isWalkable(position.x, position.z)) {
+        const back = nearestWalkable(position.x, position.z)
+        position.x = back.x
+        position.z = back.z
       }
     }
 

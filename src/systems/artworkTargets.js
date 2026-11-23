@@ -7,6 +7,7 @@
  */
 
 const targets = new Map() // artworkId (string) -> THREE.Mesh
+const emptyFrames = new Map() // frameId -> THREE.Mesh
 
 export function registerArtwork(id, mesh) {
   if (mesh) {
@@ -16,6 +17,18 @@ export function registerArtwork(id, mesh) {
   }
 }
 
+export function registerEmptyFrame(id, mesh) {
+  if (mesh) {
+    emptyFrames.set(id, mesh)
+  } else {
+    emptyFrames.delete(id)
+  }
+}
+
 export function getArtworkTargets() {
   return targets
+}
+
+export function getEmptyFrameTargets() {
+  return emptyFrames
 }

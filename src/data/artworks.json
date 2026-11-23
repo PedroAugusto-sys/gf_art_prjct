@@ -22,7 +22,7 @@
       "artist": "Artista Desconhecido",
       "year": "s/d",
       "description": "Outra obra de exemplo na parede norte. Ajuste 'position' no eixo X para espacar os quadros.",
-      "position": [0, 2.2, -18.7],
+      "position": [-11, 2.2, -18.7],
       "rotation": [0, 0, 0],
       "size": [2, 2.6]
     },

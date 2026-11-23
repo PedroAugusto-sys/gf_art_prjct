@@ -124,9 +124,24 @@ export const useGameStore = create((set, get) => ({
   // Obra atualmente em foco pela mira (null = nenhuma). Atualizada a cada frame
   // pelo ArtworkFocus sem re-renderizar o mundo 3D (usa setState seletivo).
   focusedArtwork: null,
+  focusedEmptyFrameId: null,
+  publishFrameId: null,
+  frameComposerOpen: false,
   setFocusedArtwork: (artwork) => {
-    if (get().focusedArtwork !== artwork) set({ focusedArtwork: artwork })
+    const empty = artwork ? null : get().focusedEmptyFrameId
+    if (get().focusedArtwork !== artwork || get().focusedEmptyFrameId !== empty) {
+      set({ focusedArtwork: artwork, focusedEmptyFrameId: empty })
+    }
   },
+  setFocusTarget: (artwork, emptyFrameId) => {
+    const nextArt = artwork || null
+    const nextEmpty = nextArt ? null : (emptyFrameId || null)
+    if (get().focusedArtwork === nextArt && get().focusedEmptyFrameId === nextEmpty) return
+    set({ focusedArtwork: nextArt, focusedEmptyFrameId: nextEmpty })
+  },
+  requestPublishOnFrame: (frameId) => set({ publishFrameId: frameId || null }),
+  clearPublishRequest: () => set({ publishFrameId: null }),
+  setFrameComposerOpen: (value) => set({ frameComposerOpen: !!value }),
 
   // Pausa explicita do movimento (menu, modal de obra, etc.).
   // isMovementPaused = true quando ha uma obra aberta OU quando o jogo nao comecou.
@@ -194,6 +209,9 @@ export const useGameStore = create((set, get) => ({
       isMovementPaused: true,
       selectedArtwork: null,
       focusedArtwork: null,
+      focusedEmptyFrameId: null,
+      publishFrameId: null,
+      frameComposerOpen: false,
       isPointerLocked: false,
       mpReady: false,
       mpOffline: false,

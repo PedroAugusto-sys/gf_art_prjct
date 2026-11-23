@@ -17,6 +17,8 @@ export default function UIOverlay() {
   const isStarted = useGameStore((s) => s.isStarted)
   const selectedArtwork = useGameStore((s) => s.selectedArtwork)
   const focusedArtwork = useGameStore((s) => s.focusedArtwork)
+  const focusedEmptyFrameId = useGameStore((s) => s.focusedEmptyFrameId)
+  const frameComposerOpen = useGameStore((s) => s.frameComposerOpen)
   const isPointerLocked = useGameStore((s) => s.isPointerLocked)
   const beginPlaying = useGameStore((s) => s.beginPlaying)
   const closeArtwork = useGameStore((s) => s.closeArtwork)
@@ -111,7 +113,7 @@ export default function UIOverlay() {
       const tag = el?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
       const state = useGameStore.getState()
-      if (state.selectedArtwork || showUploadModal) return
+      if (state.selectedArtwork || state.frameComposerOpen || showUploadModal) return
       e.preventDefault()
       expandGallery()
     }
@@ -122,7 +124,7 @@ export default function UIOverlay() {
   // Clique na cena recaptura. O pointerdown chega antes do click: se
   // travar em cima de um botão da HUD, o click se perde. Botões ficam de fora.
   useEffect(() => {
-    if (!isStarted || isMobile || isPointerLocked || selectedArtwork || showUploadModal) return
+    if (!isStarted || isMobile || isPointerLocked || selectedArtwork || showUploadModal || frameComposerOpen) return
     const onPointerDown = (e) => {
       if (e.button !== 0) return
       const el = e.target
@@ -132,7 +134,7 @@ export default function UIOverlay() {
     }
     window.addEventListener('pointerdown', onPointerDown)
     return () => window.removeEventListener('pointerdown', onPointerDown)
-  }, [isStarted, isMobile, isPointerLocked, selectedArtwork, showUploadModal, lockPointer])
+  }, [isStarted, isMobile, isPointerLocked, selectedArtwork, showUploadModal, frameComposerOpen, lockPointer])
 
   const handleEnter = async () => {
     if (joining) return
@@ -278,12 +280,40 @@ export default function UIOverlay() {
           Ver obra
         </div>
       )}
+      {isStarted && !selectedArtwork && !frameComposerOpen && !isMobile && isPointerLocked && !focusedArtwork && focusedEmptyFrameId && (
+        <div className="absolute left-1/2 top-[54%] -translate-x-1/2 rounded-full bg-black/55 px-5 py-1.5 text-sm text-white/90 backdrop-blur-sm">
+          Pressione E para publicar uma obra aqui
+        </div>
+      )}
 
       {/* ============ BOTAO MOBILE: obra proxima por distancia ============ */}
       {/* Canto inferior direito, z acima do VirtualControls (look zone).
           Abrir no onClick (nao onPointerDown): pointerdown montava o backdrop
           antes do click do mesmo toque, que fechava a obra na hora. */}
       <AnimatePresence>
+        {isStarted && !selectedArtwork && !frameComposerOpen && isMobile && focusedEmptyFrameId && !focusedArtwork && (
+          <motion.div
+            key="mobile-publish-wrap"
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 12 }}
+            transition={{ duration: 0.18 }}
+            className="pointer-events-auto absolute bottom-36 right-4 z-30"
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                useGameStore.getState().requestPublishOnFrame(focusedEmptyFrameId)
+              }}
+              style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+              className="flex items-center gap-2 rounded-2xl bg-white px-5 py-4 text-base font-bold text-neutral-900 shadow-2xl active:scale-95 transition-transform select-none"
+            >
+              Publicar obra aqui
+            </button>
+          </motion.div>
+        )}
         {isStarted && !selectedArtwork && isMobile && focusedArtwork && (
           <motion.div
             key="mobile-interact-wrap"
@@ -314,7 +344,7 @@ export default function UIOverlay() {
       </AnimatePresence>
 
       {/* ============ DICA PERMANENTE ============ */}
-      {isStarted && !selectedArtwork && (isMobile || isPointerLocked) && !focusedArtwork && (
+      {isStarted && !selectedArtwork && (isMobile || isPointerLocked) && !focusedArtwork && !focusedEmptyFrameId && (
         <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-black/40 px-4 py-1 text-xs text-white/70 backdrop-blur-sm">
           {isMobile ? 'Aproxime-se de uma obra para interagir' : 'Aponte para uma obra e pressione E'}
         </div>

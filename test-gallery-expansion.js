@@ -10,9 +10,12 @@ import {
   MAX_ANNEXES,
   annexFrameZs,
   annexRoomBounds,
+  frameIsOpen,
   mergeAnnexCount,
   nextAnnexCount,
 } from './src/systems/galleryExpansion.js'
+import artworksData from './src/data/artworks.json' with { type: 'json' }
+import { ANNEX_CORRIDOR_WIDTH, getCommunityFrameLayouts } from './src/data/museumLayout.js'
 import { gaitPose } from './src/systems/gait.js'
 
 function limbTipZ(hipY, hipRotX, jointY, jointRotX, tipY, tipZ = 0) {
@@ -75,6 +78,28 @@ test('a segunda sala encosta na primeira, sem vão', () => {
   const second = annexRoomBounds(1, HALF_D, ANNEX_DEPTH, HALF_W)
   assert.equal(second.maxZ, first.minZ)
   assert.equal(second.minZ, first.minZ - ANNEX_DEPTH)
+})
+
+function coversDoor(frame) {
+  const [x, , z] = frame.position
+  const halfW = (frame.size?.[0] ?? 2) / 2
+  return [-HALF_D, -HALF_D - ANNEX_DEPTH].some(
+    (doorZ) => Math.abs(z - doorZ) < 1.5 && Math.abs(x) < ANNEX_CORRIDOR_WIDTH / 2 + halfW
+  )
+}
+
+test('nenhum quadro fica no vão do corredor', () => {
+  const frames = [...artworksData.artworks, ...getCommunityFrameLayouts(MAX_ANNEXES)]
+  const blocking = frames.filter(coversDoor).map((frame) => frame.id)
+  assert.deepEqual(blocking, [])
+})
+
+test('quadro de anexo só aparece depois que a sala abre', () => {
+  assert.equal(frameIsOpen('community-1', 0), true)
+  assert.equal(frameIsOpen('annex1-1', 0), false)
+  assert.equal(frameIsOpen('annex1-1', 1), true)
+  assert.equal(frameIsOpen('annex2-4', 1), false)
+  assert.equal(frameIsOpen('annex2-4', 2), true)
 })
 
 test('os quadros da sala anexa ficam dentro dela', () => {

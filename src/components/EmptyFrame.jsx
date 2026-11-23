@@ -4,8 +4,15 @@ import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { Html } from '@react-three/drei'
 import { publishGalleryState, isRoomHost, isMultiplayerOffline } from '../systems/multiplayer'
-import { useEmptyFrameInteraction } from '../hooks/useEmptyFrameInteraction'
 import { uploadArtwork, deleteArtwork, reportArtwork, getSessionToken } from '../systems/temporaryArtworks'
+import { registerEmptyFrame } from '../systems/artworkTargets'
+
+const FRAME_MATERIAL = new THREE.MeshStandardMaterial({
+  color: '#2b2b2b',
+  roughness: 0.5,
+  metalness: 0.3,
+})
+const _framePos = new THREE.Vector3()
 
 /**
  * Comprime e converte imagem para WebP (melhor compressão que JPEG)
@@ -85,7 +92,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const communityArtworks = useGameStore((s) => s.communityArtworks)
   const addCommunityArtwork = useGameStore((s) => s.addCommunityArtwork)
   const updateCommunityArtwork = useGameStore((s) => s.updateCommunityArtwork)
-  const annexCount = useGameStore((s) => s.annexCount)
+  const publishFrameId = useGameStore((s) => s.publishFrameId)
   const playerName = useGameStore((s) => s.playerName)
   const unlockPointer = useGameStore((s) => s.unlockPointer)
   const lockPointer = useGameStore((s) => s.lockPointer)
@@ -152,13 +159,15 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   }, [artwork?.dataUrl, artwork?.url])
 
   const handleInteract = () => {
-    if (!canEdit) return
+    if (!canEdit || artwork) return
     unlockPointer()
+    useGameStore.getState().setFrameComposerOpen(true)
     setShowUploadUI(true)
   }
 
   const closeModal = () => {
     setShowUploadUI(false)
+    useGameStore.getState().setFrameComposerOpen(false)
     setTitle('')
     setUploadError('')
     setUploading(false)
@@ -170,14 +179,56 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     }
   }
 
-  const isNear = useEmptyFrameInteraction(meshRef, frameId, handleInteract)
+  useEffect(() => {
+    const mesh = meshRef.current
+    if (!mesh) return
+    mesh.userData.emptyFrameId = frameId
+    mesh.userData.filled = !!artwork
+    if (artwork) {
+      mesh.userData.artwork = {
+        id: artwork.id || frameId,
+        title: artwork.title || 'Obra',
+        artist: artwork.author || playerName || 'Visitante',
+        year: '',
+        description: 'Obra publicada nesta sala.',
+        imagePath: artwork.url || artwork.dataUrl || '',
+      }
+    } else {
+      mesh.userData.artwork = null
+    }
+    registerEmptyFrame(frameId, mesh)
+    return () => registerEmptyFrame(frameId, null)
+  }, [frameId, artwork, playerName])
 
-  useFrame(() => {
+  useEffect(() => {
+    if (publishFrameId !== frameId) return
+    useGameStore.getState().clearPublishRequest()
+    handleInteract()
+  }, [publishFrameId, frameId])
+
+  const titleNear = useRef(false)
+
+  useFrame(({ camera }) => {
     const mat = matRef.current
-    if (!mat) return
+    if (mat) {
+      const target = hovered ? 0.15 : 0
+      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity ?? 0, target, 0.1)
+    }
 
-    const target = hovered ? 0.15 : 0
-    mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity ?? 0, target, 0.1)
+    const mesh = meshRef.current
+    if (!mesh || !artwork) {
+      if (titleNear.current) {
+        titleNear.current = false
+        setShowTitle(false)
+      }
+      return
+    }
+    mesh.getWorldPosition(_framePos)
+    const near = camera.position.distanceTo(_framePos) < 4
+    if (near !== titleNear.current) {
+      titleNear.current = near
+      setShowTitle(near)
+    }
   })
 
   useEffect(() => {
@@ -192,9 +243,14 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   }, [showUploadUI])
 
   const handleClick = () => {
-    if (!canEdit) return
-    unlockPointer()
-    setShowUploadUI(true)
+    if (artwork) {
+      const view = meshRef.current?.userData?.artwork
+      if (!view) return
+      unlockPointer()
+      useGameStore.getState().openArtwork(view)
+      return
+    }
+    handleInteract()
   }
 
   const handleFileSelect = async (e) => {
@@ -241,7 +297,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
           : [...communityArtworks, newArtwork]
 
         publishGalleryState({
-          annexCount,
+          annexCount: useGameStore.getState().annexCount,
           artworks: updatedArtworks,
         })
 
@@ -287,7 +343,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         : [...communityArtworks, newArtwork]
 
       publishGalleryState({
-        annexCount,
+        annexCount: useGameStore.getState().annexCount,
         artworks: updatedArtworks,
       })
 
@@ -303,36 +359,9 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     }
   }
 
-  const frameMaterial = new THREE.MeshStandardMaterial({
-    color: '#2b2b2b',
-    roughness: 0.5,
-    metalness: 0.3,
-  })
-
-  // Proximity check para mostrar título
-  useFrame(({ camera }) => {
-    if (!meshRef.current || !artwork) {
-      setShowTitle(false)
-      return
-    }
-    const frameWorldPos = new THREE.Vector3()
-    meshRef.current.getWorldPosition(frameWorldPos)
-    const distance = camera.position.distanceTo(frameWorldPos)
-    setShowTitle(distance < 4) // Mostra título quando < 4m
-  })
-
   return (
     <group position={position} rotation={rotation}>
-      <spotLight
-        position={[0, 1.6, 1.8]}
-        angle={0.5}
-        penumbra={0.6}
-        intensity={8}
-        distance={8}
-        color="#fff6e8"
-      />
-
-      <mesh material={frameMaterial} castShadow>
+      <mesh material={FRAME_MATERIAL} castShadow>
         <boxGeometry args={[width + FRAME_BORDER * 2, height + FRAME_BORDER * 2, FRAME_DEPTH]} />
       </mesh>
 
@@ -363,25 +392,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         />
       </mesh>
 
-      {isNear && canEdit && !showUploadUI && (
-        <Html center distanceFactor={10}>
-          <div
-            style={{
-              background: 'rgba(0,0,0,0.8)',
-              color: 'white',
-              padding: '8px 16px',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 500,
-              whiteSpace: 'nowrap',
-              backdropFilter: 'blur(4px)',
-            }}
-          >
-            {artwork ? 'Pressione E para substituir' : 'Pressione E para publicar'}
-          </div>
-        </Html>
-      )}
-
       {showUploadUI && (
         <Html center distanceFactor={5} style={{ pointerEvents: 'auto' }}>
           <div
@@ -396,7 +406,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
             }}
           >
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 600 }}>
-              {artwork ? 'Substituir obra' : 'Publicar obra'}
+              {artwork ? 'Substituir obra' : 'Publicar obra aqui'}
             </h3>
 
             <div style={{ marginBottom: '16px' }}>
@@ -556,7 +566,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
                           updateCommunityArtwork(artwork.id, null)
                           // Atualiza Playroom
                           publishGalleryState({
-                            annexCount,
+                            annexCount: useGameStore.getState().annexCount,
                             artworks: communityArtworks.filter(a => a.id !== artwork.id)
                           })
                         } catch (err) {

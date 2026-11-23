@@ -8,16 +8,27 @@
  * reutilizaveis para nao pressionar o GC.
  */
 
-import { NPC_OBSTACLES, WALK_BOUNDS } from '../data/museumLayout'
+import {
+  NPC_OBSTACLES,
+  WALK_BOUNDS,
+  HALF_D,
+  HALF_W,
+  ANNEX_DEPTH,
+  ANNEX_CORRIDOR_WIDTH,
+} from '../data/museumLayout.js'
 
 // ---------- Parametros ----------
 const CELL_SIZE  = 0.5           // resolucao: 0.5m da menos celulas que 0.4m (grade 28% menor)
 const NPC_MARGIN = 0.30          // raio do corpo + folga
 const SAMPLE_STEP = 0.35         // passo do string pulling (era 0.2, muito fino)
+const MAX_ANNEXES = 2
+const CORRIDOR_HALF = ANNEX_CORRIDOR_WIDTH / 2 - 0.55
 
-// ---------- Grade ----------
+// A grade cobre a sala e os dois anexos desde o início.
+// Células de anexo nascem bloqueadas e abrem com setWalkAnnexCount,
+// sem realocar o A*.
 const minX = WALK_BOUNDS.minX
-const minZ = WALK_BOUNDS.minZ
+const minZ = -HALF_D - MAX_ANNEXES * ANNEX_DEPTH + 1.2
 const COLS = Math.ceil((WALK_BOUNDS.maxX - minX) / CELL_SIZE) + 1
 const ROWS = Math.ceil((WALK_BOUNDS.maxZ - minZ) / CELL_SIZE) + 1
 const TOTAL = COLS * ROWS
@@ -30,27 +41,65 @@ function cellZ(r)     { return minZ + r * CELL_SIZE + CELL_SIZE * 0.5 }
 
 // Uint8Array: 0 = bloqueado, 1 = livre
 const WALKABLE = new Uint8Array(TOTAL)
-;(function buildWalkable() {
+let annexOpen = 0
+
+/** Chão livre: sala principal, anexos já abertos e o vão do corredor. */
+function regionOpen(x, z, annexCount) {
+  if (x < WALK_BOUNDS.minX || x > WALK_BOUNDS.maxX || z > WALK_BOUNDS.maxZ) return false
+
+  const mainMinZ = -HALF_D + 1.2
+  if (z >= mainMinZ) return true
+  if (annexCount < 1) return false
+
+  for (let i = 0; i < annexCount; i++) {
+    const doorZ = -HALF_D - i * ANNEX_DEPTH
+    if (Math.abs(x) <= CORRIDOR_HALF && z <= doorZ + 1.6 && z >= doorZ - 1.6) return true
+
+    const roomMaxZ = doorZ - 1.0
+    const roomMinZ = doorZ - ANNEX_DEPTH + 1.2
+    if (z <= roomMaxZ && z >= roomMinZ && Math.abs(x) <= HALF_W - 1.2) return true
+  }
+  return false
+}
+
+function buildWalkable() {
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const cx = cellX(c)
       const cz = cellZ(r)
-      let free = true
-      for (let o = 0; o < NPC_OBSTACLES.length; o++) {
-        const obs = NPC_OBSTACLES[o]
-        const dx = cx - obs.x, dz = cz - obs.z
-        if (dx * dx + dz * dz < (obs.r + NPC_MARGIN) ** 2) { free = false; break }
+      let free = regionOpen(cx, cz, annexOpen)
+      if (free) {
+        for (let o = 0; o < NPC_OBSTACLES.length; o++) {
+          const obs = NPC_OBSTACLES[o]
+          const dx = cx - obs.x, dz = cz - obs.z
+          if (dx * dx + dz * dz < (obs.r + NPC_MARGIN) ** 2) { free = false; break }
+        }
       }
       WALKABLE[toIdx(c, r)] = free ? 1 : 0
     }
   }
-})()
+}
+
+buildWalkable()
+
+/** Abre o chão dos anexos já construídos. 0 = só a sala principal. */
+export function setWalkAnnexCount(count) {
+  const next = Math.max(0, Math.min(MAX_ANNEXES, count | 0))
+  if (next === annexOpen) return
+  annexOpen = next
+  buildWalkable()
+}
+
+export function isWalkable(x, z) {
+  if (!regionOpen(x, z, annexOpen)) return false
+  return WALKABLE[toIdx(colOf(x), rowOf(z))] === 1
+}
 
 // ---------- nearestWalkable ----------
 export function nearestWalkable(x, z) {
   const bc = colOf(x), br = rowOf(z)
   if (WALKABLE[toIdx(bc, br)]) return { x: cellX(bc), z: cellZ(br) }
-  for (let rad = 1; rad <= 10; rad++) {
+  for (let rad = 1; rad <= 90; rad++) {
     for (let dc = -rad; dc <= rad; dc++) {
       for (let dr = -rad; dr <= rad; dr++) {
         if (Math.abs(dc) !== rad && Math.abs(dr) !== rad) continue
@@ -191,6 +240,7 @@ function segmentFree(x0, z0, x1, z1) {
   for (let i = 1; i <= steps; i++) {
     const t = (i / steps) * len
     const x = x0 + udx * t, z = z0 + udz * t
+    if (!isWalkable(x, z)) return false
     for (let o = 0; o < NPC_OBSTACLES.length; o++) {
       const obs = NPC_OBSTACLES[o]
       const ex = x - obs.x, ez = z - obs.z

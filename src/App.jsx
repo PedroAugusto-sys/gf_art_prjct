@@ -19,6 +19,9 @@ import { GallerySync } from './components/GallerySync'
 import { TemporaryArtworkSession } from './components/TemporaryArtworkSession'
 import artworksData from './data/artworks.json'
 import { HALF_D, getCommunityFrameLayouts } from './data/museumLayout'
+import { frameIsOpen } from './systems/galleryExpansion'
+import ShaderWarmup from './components/ShaderWarmup'
+import AnnexNavSync from './components/AnnexNavSync'
 import { getVersionById } from './data/versions'
 
 useGLTF.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/')
@@ -36,7 +39,7 @@ export default function App() {
   const showRemotes = isStarted && mpReady && !mpOffline
 
   const annexCount = useGameStore((s) => s.annexCount)
-  const communityFrames = hasCommunityGallery ? getCommunityFrameLayouts(annexCount) : []
+  const communityFrames = hasCommunityGallery ? getCommunityFrameLayouts(2) : []
 
   return (
     <div className="fixed inset-0">
@@ -66,13 +69,14 @@ export default function App() {
             ))}
 
             {communityFrames.map((frame) => (
-              <EmptyFrame
-                key={frame.id}
-                frameId={frame.id}
-                position={frame.position}
-                rotation={frame.rotation}
-                size={frame.size}
-              />
+              <group key={frame.id} visible={frameIsOpen(frame.id, annexCount)}>
+                <EmptyFrame
+                  frameId={frame.id}
+                  position={frame.position}
+                  rotation={frame.rotation}
+                  size={frame.size}
+                />
+              </group>
             ))}
 
             {!prototype && (
@@ -87,6 +91,8 @@ export default function App() {
           <VisitorLayer />
           {showRemotes && <RemotePlayers />}
           <ArtworkFocus />
+          <AnnexNavSync />
+          <ShaderWarmup />
           <Preload all />
         </Suspense>
 

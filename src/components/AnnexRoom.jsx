@@ -1,60 +1,24 @@
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
-import * as THREE from 'three'
 import { useMemo } from 'react'
 import { getAnnexRoomBounds, ROOM, ANNEX_CORRIDOR_WIDTH } from '../data/museumLayout'
 
 /**
- * Sala anexa ao norte da sala principal.
- * Renderizada dinamicamente baseada no annexCount.
+ * Sala anexa ao norte. Sem luzes próprias: uma luz nova recompila o shader
+ * de todo o museu e trava o frame da expansão. A sala usa a luz da galeria.
+ * O vão de entrada é a parede norte da sala anterior; aqui só o miolo.
  */
 export default function AnnexRoom({ annexIndex, materials, openNorth = false }) {
   const bounds = useMemo(() => getAnnexRoomBounds(annexIndex), [annexIndex])
 
-  const corridorZ = bounds.maxZ + ROOM.wallThickness / 2
   const roomDepth = Math.abs(bounds.minZ - bounds.maxZ)
-  // O piso e o teto avançam um pouco para dentro da sala anterior,
-  // senão o vão da porta fica sem chão e o jogador vê o céu.
   const entranceOverlap = 0.6
   const shellDepth = roomDepth + entranceOverlap
   const shellCenterZ = bounds.centerZ + entranceOverlap / 2
+  const sideWidth = (ROOM.width - ANNEX_CORRIDOR_WIDTH) / 2
 
   return (
     <group>
-      {/* Iluminação ambiente da sala anexa */}
-      <ambientLight intensity={0.3} />
-      <directionalLight
-        position={[0, ROOM.height - 1, bounds.centerZ]}
-        intensity={0.8}
-        color="#fff6e6"
-        target-position={[0, 0, bounds.centerZ]}
-      />
-      
-      {/* Spotlights nas paredes laterais para os quadros */}
-      {[-1, 1].map((side) => (
-        <group key={`annex-lights-${side}`}>
-          <spotLight
-            position={[side * 10, ROOM.height - 1, bounds.centerZ - 6]}
-            angle={0.6}
-            penumbra={0.7}
-            intensity={10}
-            distance={12}
-            color="#fff6e8"
-            target-position={[side * 13.7, 2.2, bounds.centerZ - 6]}
-          />
-          <spotLight
-            position={[side * 10, ROOM.height - 1, bounds.centerZ]}
-            angle={0.6}
-            penumbra={0.7}
-            intensity={10}
-            distance={12}
-            color="#fff6e8"
-            target-position={[side * 13.7, 2.2, bounds.centerZ]}
-          />
-        </group>
-      ))}
-      
       <RigidBody type="fixed" colliders={false}>
-        {/* Piso da sala anexa */}
         <mesh
           material={materials.floor}
           rotation={[-Math.PI / 2, 0, 0]}
@@ -67,17 +31,15 @@ export default function AnnexRoom({ annexIndex, materials, openNorth = false }) 
           args={[ROOM.width / 2, 0.1, shellDepth / 2]}
           position={[0, -0.1, shellCenterZ]}
         />
-        
-        {/* Teto da sala anexa */}
-        <mesh 
-          material={materials.ceiling} 
-          rotation={[Math.PI / 2, 0, 0]} 
+
+        <mesh
+          material={materials.ceiling}
+          rotation={[Math.PI / 2, 0, 0]}
           position={[0, ROOM.height, shellCenterZ]}
         >
           <planeGeometry args={[ROOM.width, shellDepth]} />
         </mesh>
-        
-        {/* Faixas luminosas no teto */}
+
         {[-6, 0, 6].map((x) => (
           <mesh
             key={`annex-skylight-${x}`}
@@ -89,44 +51,40 @@ export default function AnnexRoom({ annexIndex, materials, openNorth = false }) 
           </mesh>
         ))}
 
-        {/* Parede norte: fechada na última sala, com corredor se houver outra depois */}
-        {openNorth ? (
-          [-1, 1].map((side) => {
-            const sideWidth = (ROOM.width - ANNEX_CORRIDOR_WIDTH) / 2
-            const sideX = side * (ANNEX_CORRIDOR_WIDTH / 2 + sideWidth / 2)
-            return (
-              <group key={`annex-north-${side}`}>
-                <mesh
-                  material={materials.wall}
-                  position={[sideX, ROOM.height / 2, bounds.minZ]}
-                  receiveShadow
-                >
-                  <boxGeometry args={[sideWidth, ROOM.height, ROOM.wallThickness]} />
-                </mesh>
-                <CuboidCollider
-                  args={[sideWidth / 2, ROOM.height / 2, ROOM.wallThickness / 2]}
-                  position={[sideX, ROOM.height / 2, bounds.minZ]}
-                />
-              </group>
-            )
-          })
-        ) : (
+        {[-1, 1].map((side) => {
+          const sideX = side * (ANNEX_CORRIDOR_WIDTH / 2 + sideWidth / 2)
+          return (
+            <group key={`annex-north-${side}`}>
+              <mesh
+                material={materials.wall}
+                position={[sideX, ROOM.height / 2, bounds.minZ]}
+                receiveShadow
+              >
+                <boxGeometry args={[sideWidth, ROOM.height, ROOM.wallThickness]} />
+              </mesh>
+              <CuboidCollider
+                args={[sideWidth / 2, ROOM.height / 2, ROOM.wallThickness / 2]}
+                position={[sideX, ROOM.height / 2, bounds.minZ]}
+              />
+            </group>
+          )
+        })}
+        {!openNorth && (
           <>
             <mesh
               material={materials.wall}
               position={[0, ROOM.height / 2, bounds.minZ]}
               receiveShadow
             >
-              <boxGeometry args={[ROOM.width, ROOM.height, ROOM.wallThickness]} />
+              <boxGeometry args={[ANNEX_CORRIDOR_WIDTH, ROOM.height, ROOM.wallThickness]} />
             </mesh>
             <CuboidCollider
-              args={[ROOM.width / 2, ROOM.height / 2, ROOM.wallThickness / 2]}
+              args={[ANNEX_CORRIDOR_WIDTH / 2, ROOM.height / 2, ROOM.wallThickness / 2]}
               position={[0, ROOM.height / 2, bounds.minZ]}
             />
           </>
         )}
 
-        {/* Paredes laterais da sala anexa */}
         {[-1, 1].map((side) => (
           <group key={`annex-side-${side}`}>
             <mesh
@@ -148,28 +106,6 @@ export default function AnnexRoom({ annexIndex, materials, openNorth = false }) 
             />
           </group>
         ))}
-
-        {/* Abertura do corredor (paredes laterais ao corredor) */}
-        {[-1, 1].map((side) => {
-          const sideWidth = (ROOM.width - ANNEX_CORRIDOR_WIDTH) / 2
-          const sideX = side * (ANNEX_CORRIDOR_WIDTH / 2 + sideWidth / 2)
-
-          return (
-            <group key={`corridor-wall-${side}`}>
-              <mesh
-                material={materials.wall}
-                position={[sideX, ROOM.height / 2, corridorZ]}
-                receiveShadow
-              >
-                <boxGeometry args={[sideWidth, ROOM.height, ROOM.wallThickness]} />
-              </mesh>
-              <CuboidCollider
-                args={[sideWidth / 2, ROOM.height / 2, ROOM.wallThickness / 2]}
-                position={[sideX, ROOM.height / 2, corridorZ]}
-              />
-            </group>
-          )
-        })}
       </RigidBody>
     </group>
   )
