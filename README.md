@@ -115,7 +115,7 @@ npm run build
 
 - ✅ Galeria multiplayer em tempo real (até 10 jogadores)
 - ✅ NPCs que caminham e reagem a obras de arte
-- ✅ Toggle de câmera 1ª ↔ 3ª pessoa (tecla V)
+- ✅ Câmera em primeira pessoa
 - ✅ Upload de obras comunitárias
 - ✅ Expansão dinâmica do espaço (até 2 anexos)
 - ✅ Modo offline quando Playroom indisponível
@@ -126,8 +126,9 @@ npm run build
 - **WASD / Setas**: Movimento
 - **Mouse**: Olhar ao redor (pointer lock)
 - **E**: Ver obra (quando próximo)
-- **V**: Alternar câmera 1ª/3ª pessoa
-- **ESC**: Menu / Trocar versão
+- **G**: Expandir galeria
+- **ESC**: Soltar o mouse (os botões da HUD ficam clicáveis; clique na cena para olhar de novo)
+- **Menu**: Trocar versão
 
 ### Mobile
 - **Joystick esquerdo**: Movimento

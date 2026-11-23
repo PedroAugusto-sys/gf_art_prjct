@@ -2,7 +2,7 @@
  * Frases positivas curtas que os NPCs dizem ao observar obras.
  */
 
-import artworksData from '../data/artworks.json'
+import artworksData from '../data/artworks.json' with { type: 'json' }
 
 const POSITIVE_LINES = [
   'Que obra linda.',

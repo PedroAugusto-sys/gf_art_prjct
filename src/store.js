@@ -124,9 +124,39 @@ export const useGameStore = create((set, get) => ({
   // Obra atualmente em foco pela mira (null = nenhuma). Atualizada a cada frame
   // pelo ArtworkFocus sem re-renderizar o mundo 3D (usa setState seletivo).
   focusedArtwork: null,
+  focusedEmptyFrameId: null,
+  focusedExampleArtwork: null,
+  publishFrameId: null,
+  frameComposerOpen: false,
   setFocusedArtwork: (artwork) => {
-    if (get().focusedArtwork !== artwork) set({ focusedArtwork: artwork })
+    const empty = artwork ? null : get().focusedEmptyFrameId
+    const example = artwork ? null : get().focusedExampleArtwork
+    if (
+      get().focusedArtwork !== artwork ||
+      get().focusedEmptyFrameId !== empty ||
+      get().focusedExampleArtwork !== example
+    ) {
+      set({ focusedArtwork: artwork, focusedEmptyFrameId: empty, focusedExampleArtwork: example })
+    }
   },
+  setFocusTarget: (artwork, emptyFrameId, exampleArtwork = null) => {
+    const nextArt = artwork || null
+    const nextEmpty = nextArt ? null : (emptyFrameId || null)
+    const nextExample = nextArt ? null : (exampleArtwork || null)
+    if (
+      get().focusedArtwork === nextArt &&
+      get().focusedEmptyFrameId === nextEmpty &&
+      get().focusedExampleArtwork === nextExample
+    ) return
+    set({
+      focusedArtwork: nextArt,
+      focusedEmptyFrameId: nextEmpty,
+      focusedExampleArtwork: nextExample,
+    })
+  },
+  requestPublishOnFrame: (frameId) => set({ publishFrameId: frameId || null }),
+  clearPublishRequest: () => set({ publishFrameId: null }),
+  setFrameComposerOpen: (value) => set({ frameComposerOpen: !!value }),
 
   // Pausa explicita do movimento (menu, modal de obra, etc.).
   // isMovementPaused = true quando ha uma obra aberta OU quando o jogo nao comecou.
@@ -146,18 +176,8 @@ export const useGameStore = create((set, get) => ({
       return
     }
     set({ isPointerLocked: value })
-
-    // Com pointer lock, o ESC e consumido pelo browser e o keydown nao chega.
-    // Sair do lock (ESC) enquanto joga → menu de versoes.
-    if (prev && !value) {
-      const skip = skipVersionMenuOnUnlock
-      skipVersionMenuOnUnlock = false
-      if (!skip && get().isStarted && !get().isMobile && !get().selectedArtwork) {
-        queueMicrotask(() => {
-          if (get().isStarted) get().returnToVersionSelect()
-        })
-      }
-    }
+    // ESC só solta o mouse. O menu continua no botão Menu.
+    if (prev && !value) skipVersionMenuOnUnlock = false
   },
 
   registerPointerControls: (lock, unlock) => {
@@ -204,6 +224,10 @@ export const useGameStore = create((set, get) => ({
       isMovementPaused: true,
       selectedArtwork: null,
       focusedArtwork: null,
+      focusedEmptyFrameId: null,
+      focusedExampleArtwork: null,
+      publishFrameId: null,
+      frameComposerOpen: false,
       isPointerLocked: false,
       mpReady: false,
       mpOffline: false,
@@ -283,14 +307,6 @@ export const useGameStore = create((set, get) => ({
   getVersionFlags: () => {
     const v = resolvePlayableVersion(get().selectedVersionId)
     return v?.flags || {}
-  },
-
-  // ---------- Camera mode ----------
-  // 'first' = primeira pessoa (padrao), 'third' = terceira pessoa com corpo completo
-  cameraMode: 'first',
-  toggleCameraMode: () => {
-    const current = get().cameraMode
-    set({ cameraMode: current === 'first' ? 'third' : 'first' })
   },
 
   // ---------- Entrada transitoria (NAO assinar em componentes de UI) ----------

@@ -1,4 +1,4 @@
-import { ART_VIEWING_SPOTS, IDLE_SPOTS } from '../data/museumLayout'
+import { ART_VIEWING_SPOTS, IDLE_SPOTS, HALF_D, getCommunityFrameLayouts } from '../data/museumLayout.js'
 
 /**
  * Coordenacao da multidao, fora do React (nenhum re-render por frame).
@@ -20,6 +20,51 @@ const IDLE_SPOT_LIST = IDLE_SPOTS.map((spot, i) => ({
   artId: null,
 }))
 
+const ANNEX_IDLES = [
+  { annex: 1, x: 0, z: -26 },
+  { annex: 1, x: -5, z: -32 },
+  { annex: 1, x: 5, z: -33 },
+  { annex: 1, x: 0, z: -36 },
+  { annex: 2, x: 0, z: -46 },
+  { annex: 2, x: -5, z: -52 },
+  { annex: 2, x: 5, z: -53 },
+  { annex: 2, x: 0, z: -55 },
+]
+
+let viewingSpots = ART_VIEWING_SPOTS
+let idleSpots = IDLE_SPOT_LIST
+
+function communitySpots(annexCount) {
+  return getCommunityFrameLayouts(annexCount).map((frame) => {
+    const ry = frame.rotation?.[1] ?? 0
+    const nx = Math.sin(ry)
+    const nz = Math.cos(ry)
+    const [ax, , az] = frame.position
+    return {
+      key: `community::${frame.id}`,
+      artId: frame.id,
+      x: ax + nx * 2.6,
+      z: az + nz * 2.6,
+      look: [ax, 2.2, az],
+    }
+  })
+}
+
+/** Inclui os pontos dos anexos abertos. Metade das escolhas prefere essas salas. */
+export function setCrowdAnnexCount(annexCount) {
+  const n = Math.max(0, Math.min(2, annexCount | 0))
+  viewingSpots = ART_VIEWING_SPOTS.concat(communitySpots(n))
+  idleSpots = IDLE_SPOT_LIST.concat(
+    ANNEX_IDLES.filter((spot) => spot.annex <= n).map((spot) => ({
+      key: `idle-annex::${spot.annex}:${spot.x}:${spot.z}`,
+      x: spot.x,
+      z: spot.z,
+      look: null,
+      artId: null,
+    }))
+  )
+}
+
 const reservedBy = new Map() // spotKey -> npcId
 const agents = new Map() // npcId -> { x, z }
 
@@ -30,8 +75,11 @@ export function releaseSpot(npcId) {
 }
 
 function nearestFree(spots, x, z, filter) {
-  const free = spots.filter((spot) => !reservedBy.has(spot.key) && (!filter || filter(spot)))
+  let free = spots.filter((spot) => !reservedBy.has(spot.key) && (!filter || filter(spot)))
   if (free.length === 0) return null
+
+  const annex = free.filter((spot) => spot.z < -HALF_D + 0.5)
+  if (annex.length > 0 && Math.random() < 0.5) free = annex
 
   free.sort(
     (a, b) => (a.x - x) ** 2 + (a.z - z) ** 2 - ((b.x - x) ** 2 + (b.z - z) ** 2)
@@ -45,7 +93,7 @@ function nearestFree(spots, x, z, filter) {
 /** Reserva um ponto de observacao livre, evitando a obra recem-visitada. */
 export function claimViewingSpot(npcId, { x = 0, z = 0, avoidArtId = null } = {}) {
   releaseSpot(npcId)
-  const chosen = nearestFree(ART_VIEWING_SPOTS, x, z, (spot) => spot.artId !== avoidArtId)
+  const chosen = nearestFree(viewingSpots, x, z, (spot) => spot.artId !== avoidArtId)
   if (chosen) reservedBy.set(chosen.key, npcId)
   return chosen
 }
@@ -53,7 +101,7 @@ export function claimViewingSpot(npcId, { x = 0, z = 0, avoidArtId = null } = {}
 /** Reserva um ponto neutro quando todas as vagas de obra estao ocupadas. */
 export function claimIdleSpot(npcId, { x = 0, z = 0 } = {}) {
   releaseSpot(npcId)
-  const chosen = nearestFree(IDLE_SPOT_LIST, x, z)
+  const chosen = nearestFree(idleSpots, x, z)
   if (chosen) reservedBy.set(chosen.key, npcId)
   return chosen
 }
@@ -71,6 +119,14 @@ export function updateAgent(npcId, x, z) {
 export function removeAgent(npcId) {
   agents.delete(npcId)
   releaseSpot(npcId)
+}
+
+/** Limpa reservas. Usado pela simulação de navegação. */
+export function resetCrowd() {
+  reservedBy.clear()
+  agents.clear()
+  viewingSpots = ART_VIEWING_SPOTS
+  idleSpots = IDLE_SPOT_LIST
 }
 
 /**

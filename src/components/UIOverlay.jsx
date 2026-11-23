@@ -17,8 +17,10 @@ export default function UIOverlay() {
   const isStarted = useGameStore((s) => s.isStarted)
   const selectedArtwork = useGameStore((s) => s.selectedArtwork)
   const focusedArtwork = useGameStore((s) => s.focusedArtwork)
+  const focusedEmptyFrameId = useGameStore((s) => s.focusedEmptyFrameId)
+  const focusedExampleArtwork = useGameStore((s) => s.focusedExampleArtwork)
+  const frameComposerOpen = useGameStore((s) => s.frameComposerOpen)
   const isPointerLocked = useGameStore((s) => s.isPointerLocked)
-  const cameraMode = useGameStore((s) => s.cameraMode)
   const beginPlaying = useGameStore((s) => s.beginPlaying)
   const closeArtwork = useGameStore((s) => s.closeArtwork)
   const lockPointer = useGameStore((s) => s.lockPointer)
@@ -32,8 +34,6 @@ export default function UIOverlay() {
   const playerName = useGameStore((s) => s.playerName)
   const ensurePlayableVersion = useGameStore((s) => s.ensurePlayableVersion)
 
-  const wantsResume = isStarted && !isMobile && !selectedArtwork && !isPointerLocked
-  const [showResume, setShowResume] = useState(false)
   const [nick, setNick] = useState('')
   const [nickError, setNickError] = useState('')
   const [joining, setJoining] = useState(false)
@@ -82,32 +82,60 @@ export default function UIOverlay() {
     if (!isStarted) setOfflineHint('')
   }, [isStarted, playerName])
 
+  // ESC solta o mouse. Não volta ao menu: o botão Menu faz isso.
+  // Com pointer lock o browser já destrava; aqui só evitamos o menu
+  // e fechamos modal/obra se estiverem abertos.
   useEffect(() => {
-    if (!wantsResume) {
-      setShowResume(false)
-      return
-    }
-    const timer = setTimeout(() => setShowResume(true), 220)
-    return () => clearTimeout(timer)
-  }, [wantsResume])
-
-  // ESC com mouse livre (ex.: overlay "continuar" ou modal de obra).
-  // Com pointer lock, o browser engole o ESC — o store trata via onUnlock.
-  useEffect(() => {
-    if (!isStarted) return
+    if (!isStarted || isMobile) return
     const onKey = (e) => {
       if (e.code !== 'Escape' && e.key !== 'Escape') return
+      const state = useGameStore.getState()
+      if (state.selectedArtwork) {
+        e.preventDefault()
+        closeArtwork()
+        return
+      }
+      if (showUploadModal) {
+        e.preventDefault()
+        setShowUploadModal(false)
+        return
+      }
+      if (state.isPointerLocked) unlockPointer()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isStarted, isMobile, showUploadModal, closeArtwork, unlockPointer])
+
+  useEffect(() => {
+    if (!isStarted || isMobile || !hasCommunityGallery) return
+    const onKey = (e) => {
+      if (e.code !== 'KeyG' || e.repeat) return
+      const el = document.activeElement
+      const tag = el?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return
+      const state = useGameStore.getState()
+      if (state.selectedArtwork || state.frameComposerOpen || showUploadModal) return
       e.preventDefault()
-      e.stopPropagation()
-      returnToVersionSelect()
+      expandGallery()
     }
-    window.addEventListener('keyup', onKey, true)
-    window.addEventListener('keydown', onKey, true)
-    return () => {
-      window.removeEventListener('keyup', onKey, true)
-      window.removeEventListener('keydown', onKey, true)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isStarted, isMobile, hasCommunityGallery, showUploadModal])
+
+  // Clique na cena recaptura. O pointerdown chega antes do click: se
+  // travar em cima de um botão da HUD, o click se perde. Botões ficam de fora.
+  useEffect(() => {
+    if (!isStarted || isMobile || isPointerLocked || selectedArtwork || showUploadModal || frameComposerOpen) return
+    const onPointerDown = (e) => {
+      if (e.button !== 0) return
+      const el = e.target
+      if (!(el instanceof Element)) return
+      if (el.closest('button, a, input, textarea, select, label')) return
+      lockPointer()
     }
-  }, [isStarted, returnToVersionSelect])
+    window.addEventListener('pointerdown', onPointerDown)
+    return () => window.removeEventListener('pointerdown', onPointerDown)
+  }, [isStarted, isMobile, isPointerLocked, selectedArtwork, showUploadModal, frameComposerOpen, lockPointer])
 
   const handleEnter = async () => {
     if (joining) return
@@ -215,29 +243,11 @@ export default function UIOverlay() {
         )}
       </AnimatePresence>
 
-      {/* ============ RETOMAR LOOK (ESC / unlock sem modal) ============ */}
-      {/* Botao compacto no centro-baixo da tela: nao escurece a cena,
-          facil de achar e clicar sem cobrir o que o usuario quer ver. */}
-      <AnimatePresence>
-        {showResume && (
-          <motion.button
-            key="resume"
-            type="button"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.2 }}
-            onClick={lockPointer}
-            className="pointer-events-auto absolute bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full bg-black/70 px-7 py-3 text-sm font-medium text-white/95 shadow-lg backdrop-blur-sm hover:bg-black/85 active:scale-95 transition-transform"
-          >
-            {/* Icone de cursor / clique */}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 shrink-0 opacity-80">
-              <path d="M13.5 4.5a1.5 1.5 0 1 1 3 0v8.25l1.72-1.72a.75.75 0 0 1 1.06 1.06l-3 3a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 0 1 1.06-1.06l1.22 1.22V4.5ZM6 3.75A2.25 2.25 0 0 0 3.75 6v13.5A2.25 2.25 0 0 0 6 21.75h12A2.25 2.25 0 0 0 20.25 19.5V6A2.25 2.25 0 0 0 18 3.75H6Z" />
-            </svg>
-            Clique para continuar
-          </motion.button>
-        )}
-      </AnimatePresence>
+      {isStarted && !selectedArtwork && !isMobile && (
+        <div className="pointer-events-none absolute left-1/2 top-14 z-30 -translate-x-1/2 rounded-full bg-black/60 px-4 py-1.5 text-xs text-white/90 backdrop-blur-sm">
+          {isPointerLocked ? 'Esc para soltar o mouse' : 'Clique na cena para continuar'}
+        </div>
+      )}
 
       {/* ============ MIRA (desktop, jogando, mouse capturado) ============ */}
       {isStarted && !selectedArtwork && !isMobile && isPointerLocked && (
@@ -251,23 +261,10 @@ export default function UIOverlay() {
         <button
           type="button"
           onClick={returnToVersionSelect}
-          className="pointer-events-auto absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm hover:bg-black/70"
+          className="pointer-events-auto absolute left-4 top-4 z-30 flex items-center gap-2 rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm hover:bg-black/70"
         >
-          <span className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
-            ESC
-          </span>
           Menu
         </button>
-      )}
-
-      {/* ============ HINT CAMERA TOGGLE (desktop) ============ */}
-      {isStarted && !selectedArtwork && !isMobile && (
-        <div className="pointer-events-none absolute left-4 top-16 flex items-center gap-2 rounded-full bg-black/40 px-3 py-1.5 text-xs text-white/70 backdrop-blur-sm">
-          <span className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
-            V
-          </span>
-          {cameraMode === 'first' ? '3ª pessoa' : '1ª pessoa'}
-        </div>
       )}
 
       {/* ============ AVISO MULTIPLAYER OFFLINE ============ */}
@@ -284,12 +281,70 @@ export default function UIOverlay() {
           Ver obra
         </div>
       )}
+      {isStarted && !selectedArtwork && !frameComposerOpen && !isMobile && isPointerLocked && !focusedArtwork && focusedEmptyFrameId && (
+        <div className="absolute left-1/2 top-[54%] flex -translate-x-1/2 items-center gap-2">
+          <div className="rounded-full bg-black/55 px-5 py-1.5 text-sm text-white/90 backdrop-blur-sm">
+            Pressione E para publicar uma obra aqui
+          </div>
+          {focusedExampleArtwork && (
+            <button
+              type="button"
+              onClick={() => {
+                artworkOpenedAt.current = performance.now()
+                useGameStore.getState().openArtwork(focusedExampleArtwork)
+              }}
+              className="pointer-events-auto rounded-full bg-black/55 px-3 py-1.5 text-sm text-white/90 backdrop-blur-sm"
+            >
+              <span className="mr-1 rounded border border-white/50 bg-white/10 px-1.5 py-0.5 font-mono text-xs">V</span>
+              Ver exemplo
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ============ BOTAO MOBILE: obra proxima por distancia ============ */}
       {/* Canto inferior direito, z acima do VirtualControls (look zone).
           Abrir no onClick (nao onPointerDown): pointerdown montava o backdrop
           antes do click do mesmo toque, que fechava a obra na hora. */}
       <AnimatePresence>
+        {isStarted && !selectedArtwork && !frameComposerOpen && isMobile && focusedEmptyFrameId && !focusedArtwork && (
+          <motion.div
+            key="mobile-publish-wrap"
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 12 }}
+            transition={{ duration: 0.18 }}
+            className="pointer-events-auto absolute bottom-36 right-4 z-30"
+          >
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                useGameStore.getState().requestPublishOnFrame(focusedEmptyFrameId)
+              }}
+              style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+              className="flex items-center gap-2 rounded-2xl bg-white px-5 py-4 text-base font-bold text-neutral-900 shadow-2xl active:scale-95 transition-transform select-none"
+            >
+              Publicar obra aqui
+            </button>
+            {focusedExampleArtwork && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  artworkOpenedAt.current = performance.now()
+                  useGameStore.getState().openArtwork(focusedExampleArtwork)
+                }}
+                style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                className="mt-2 flex items-center gap-2 rounded-2xl bg-black/70 px-5 py-3 text-sm font-semibold text-white shadow-2xl"
+              >
+                Ver exemplo
+              </button>
+            )}
+          </motion.div>
+        )}
         {isStarted && !selectedArtwork && isMobile && focusedArtwork && (
           <motion.div
             key="mobile-interact-wrap"
@@ -320,7 +375,7 @@ export default function UIOverlay() {
       </AnimatePresence>
 
       {/* ============ DICA PERMANENTE ============ */}
-      {isStarted && !selectedArtwork && (isMobile || isPointerLocked) && !focusedArtwork && (
+      {isStarted && !selectedArtwork && (isMobile || isPointerLocked) && !focusedArtwork && !focusedEmptyFrameId && (
         <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-black/40 px-4 py-1 text-xs text-white/70 backdrop-blur-sm">
           {isMobile ? 'Aproxime-se de uma obra para interagir' : 'Aponte para uma obra e pressione E'}
         </div>
@@ -411,6 +466,11 @@ export default function UIOverlay() {
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
                 <path fillRule="evenodd" d="M12 3.75a.75.75 0 01.75.75v6.75h6.75a.75.75 0 010 1.5h-6.75v6.75a.75.75 0 01-1.5 0v-6.75H4.5a.75.75 0 010-1.5h6.75V4.5a.75.75 0 01.75-.75z" clipRule="evenodd" />
               </svg>
+              {!isMobile && (
+                <span className="rounded border border-white/40 bg-white/10 px-1.5 py-0.5 font-mono text-[10px]">
+                  G
+                </span>
+              )}
               Expandir Galeria
               <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
                 {annexCount}/2

@@ -1,70 +1,68 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { registerArtwork } from '../systems/artworkTargets'
+import { isExampleArtwork } from '../systems/frameTexture'
+import { useFrameTexture } from '../hooks/useFrameTexture'
+import PublishForm from './PublishForm'
 
 const FRAME_DEPTH = 0.08
 const FRAME_BORDER = 0.12
 
 /**
- * ArtworkFrame: uma obra na parede (moldura 3D + tela texturizada + spotlight).
- *
- * A textura (imagePath) e carregada de forma resiliente: se o arquivo ainda nao
- * existir em public/assets/artworks/, mostramos um placeholder cinza em vez de
- * quebrar a cena. Assim voce pode montar o museu antes de ter todas as imagens.
- *
- * >>> ONDE COLOCAR SUAS IMAGENS <<<
- * public/assets/artworks/  -> e o 'imagePath' no artworks.json aponta para
- * '/assets/artworks/nome-do-arquivo.jpg' (com barra inicial).
+ * Obra na parede. O catálogo de exemplo aceita publicação: sem obra de
+ * visitante, E abre "Publicar obra aqui". Com obra publicada, a textura
+ * do quadro é a imagem enviada e E abre Ver obra.
  */
 export default function ArtworkFrame({ artwork }) {
-  const { id, imagePath, title, position, rotation, size } = artwork
+  const { id, title, position, rotation, size } = artwork
   const [width, height] = size || [2, 1.5]
 
   const openArtwork = useGameStore((s) => s.openArtwork)
+  const communityArtworks = useGameStore((s) => s.communityArtworks)
+  const publishFrameId = useGameStore((s) => s.publishFrameId)
+  const playerName = useGameStore((s) => s.playerName)
 
-  const [texture, setTexture] = useState(null)
+  const published = communityArtworks.find((art) => art.frameId === id) || null
+  const example = isExampleArtwork(artwork) && !published
+
   const [hovered, setHovered] = useState(false)
+  const [showUploadUI, setShowUploadUI] = useState(false)
   const canvasMatRef = useRef(null)
   const meshRef = useRef(null)
+  const texture = useFrameTexture(published || artwork, width, height, canvasMatRef)
 
-  // Registra a malha para raycasting via mira
+  const viewArtwork = published
+    ? {
+        id: published.id || id,
+        title: published.title || 'Obra',
+        artist: published.author || playerName || 'Visitante',
+        year: '',
+        description: 'Obra publicada nesta sala.',
+        imagePath: published.dataUrl || published.url || '',
+      }
+    : artwork
+
   useEffect(() => {
     registerArtwork(id, meshRef.current)
     return () => registerArtwork(id, null)
   }, [id])
 
-  // ---------- Carregamento resiliente da textura ----------
   useEffect(() => {
-    let active = true
-    const loader = new THREE.TextureLoader()
-    loader.load(
-      imagePath,
-      (tex) => {
-        if (!active) return
-        tex.colorSpace = THREE.SRGBColorSpace
-        tex.anisotropy = 8
-        setTexture(tex)
-      },
-      undefined,
-      () => {
-        // Falha (arquivo ausente): mantemos o placeholder. Sem crash.
-        if (active) setTexture(null)
-      }
-    )
-    return () => {
-      active = false
-    }
-  }, [imagePath])
+    if (!example || publishFrameId !== id) return
+    useGameStore.getState().clearPublishRequest()
+    useGameStore.getState().unlockPointer()
+    useGameStore.getState().setFrameComposerOpen(true)
+    setShowUploadUI(true)
+  }, [publishFrameId, id, example])
 
-  // Materiais da moldura (reaproveitados)
   const frameMaterial = useMemo(
     () => new THREE.MeshStandardMaterial({ color: '#2b2b2b', roughness: 0.5, metalness: 0.3 }),
     []
   )
 
-  // Realce sutil ao passar o mouse/dedo (emissive na tela)
   useFrame(() => {
     const mat = canvasMatRef.current
     if (!mat) return
@@ -72,11 +70,18 @@ export default function ArtworkFrame({ artwork }) {
     mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity ?? 0, target, 0.15)
   })
 
-  // ---------- Handlers de raycasting (R3F) ----------
+  const closeUpload = () => {
+    setShowUploadUI(false)
+    useGameStore.getState().setFrameComposerOpen(false)
+    if (!useGameStore.getState().isMobile) {
+      setTimeout(() => useGameStore.getState().lockPointer(), 100)
+    }
+  }
+
   const handleOver = (e) => {
     e.stopPropagation()
     setHovered(true)
-    document.body.style.cursor = 'pointer' // muda o cursor no desktop
+    document.body.style.cursor = 'pointer'
   }
   const handleOut = (e) => {
     e.stopPropagation()
@@ -85,16 +90,23 @@ export default function ArtworkFrame({ artwork }) {
   }
   const handleClick = (e) => {
     e.stopPropagation()
-    // So abre se o clique veio de perto (distancia da camera ate a obra <= 2.8 m)
     if (e.distance > 2.8) return
     document.body.style.cursor = 'auto'
     useGameStore.getState().unlockPointer()
+    if (published) {
+      openArtwork(viewArtwork)
+      return
+    }
+    if (example) {
+      useGameStore.getState().setFrameComposerOpen(true)
+      setShowUploadUI(true)
+      return
+    }
     openArtwork(artwork)
   }
 
   return (
     <group position={position} rotation={rotation}>
-      {/* Spotlight direcionado a obra */}
       <spotLight
         position={[0, 1.6, 1.8]}
         angle={0.5}
@@ -106,19 +118,24 @@ export default function ArtworkFrame({ artwork }) {
         color="#fff6e8"
       />
 
-      {/* Moldura (borda) */}
       <mesh material={frameMaterial} castShadow>
         <boxGeometry args={[width + FRAME_BORDER * 2, height + FRAME_BORDER * 2, FRAME_DEPTH]} />
       </mesh>
 
-      {/* Tela / area interativa (recebe os eventos de ponteiro e raycast da mira) */}
       <mesh
         ref={meshRef}
         position={[0, 0, FRAME_DEPTH / 2 + 0.001]}
         onPointerOver={handleOver}
         onPointerOut={handleOut}
         onClick={handleClick}
-        userData={{ artworkId: id, artwork }}
+        userData={{
+          artworkId: id,
+          artwork: viewArtwork,
+          published: !!published,
+          example,
+          filled: !!published,
+          emptyFrameId: example ? id : null,
+        }}
       >
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial
@@ -129,19 +146,23 @@ export default function ArtworkFrame({ artwork }) {
           emissiveIntensity={0}
           roughness={0.6}
           metalness={0}
-          toneMapped={true}
+          toneMapped
         />
       </mesh>
 
-      {/* Placa com o titulo (fallback simples enquanto nao ha imagem) */}
       {!texture && (
         <mesh position={[0, -height / 2 - 0.25, FRAME_DEPTH]}>
           <planeGeometry args={[Math.min(width, 1.6), 0.28]} />
           <meshBasicMaterial color="#1f1f1f" />
         </mesh>
       )}
-      {/* 'title' fica disponivel para debug/uso futuro (ex.: <Text> do drei) */}
       <group name={`artwork-${title}`} />
+
+      {showUploadUI && (
+        <Html center distanceFactor={5} style={{ pointerEvents: 'auto' }}>
+          <PublishForm frameId={id} existing={published} onClose={closeUpload} />
+        </Html>
+      )}
     </group>
   )
 }

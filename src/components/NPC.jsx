@@ -10,7 +10,8 @@ import {
   removeAgent,
   separationForce,
 } from '../systems/crowd'
-import { findPath } from '../systems/navgrid'
+import { findPath, isWalkable, nearestWalkable } from '../systems/navgrid'
+import { createWalker, tickWalker } from '../systems/npcLocomotion'
 import { useVisitorStore } from '../systems/visitorFlow'
 import { npcPosMap } from '../systems/proximityRefs'
 import { sim, advanceSim } from '../systems/simClock'
@@ -100,25 +101,7 @@ function shortestAngle(from, to) {
  * frente da obra, e nao no waypoint do corredor.
  */
 function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedExit) {
-  const brain = useRef({
-    mode: 'walking',
-    route: [],
-    look: null,
-    lastArtId: null,
-    until: 0,
-    started: false,
-    avoidSide: entrySide,
-    stuckCheckAt: 0,
-    stuckX: 0,
-    stuckZ: 0,
-    stuckRetries: 0,
-    leavingAt: 0,
-    // Fala
-    speechText: null,
-    speechUntil: 0,
-    speechCooldownUntil: 0,
-    speechArmedAt: 0,
-  })
+  const brain = useRef(createWalker(entrySide))
   const yaw = useRef(0) // Modelo aponta para +Z quando yaw=0
   const separation = useRef({ x: 0, z: 0 })
 
@@ -222,6 +205,45 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
     const time = sim.time // relogio monotonico: imune a troca de aba
     const position = group.position
     const state = brain.current
+
+    if (!isLegacyNpcs()) {
+      const result = tickWalker(state, position, dt, time, { npcId, leaving, entrySide })
+      if (result.despawn) {
+        onReachedExit()
+        return
+      }
+      if (result.faceX !== null && (Math.abs(result.faceX) > 1e-4 || Math.abs(result.faceZ) > 1e-4)) {
+        const desired = Math.atan2(result.faceX, result.faceZ)
+        yaw.current += shortestAngle(yaw.current, desired) * Math.min(1, TURN_SPEED * dt)
+        group.rotation.y = yaw.current
+      }
+      if (
+        state.mode === 'viewing' &&
+        state.speechArmedAt > 0 &&
+        time >= state.speechArmedAt
+      ) {
+        state.speechArmedAt = 0
+        if (
+          time >= state.speechCooldownUntil &&
+          !state.speechText &&
+          canStartSpeech(time) &&
+          Math.random() < SPEECH_CHANCE
+        ) {
+          state.speechText = pickPositiveLine(state.lastArtId)
+          state.speechUntil = time + SPEECH_DURATION
+          markSpeechStarted(time)
+        }
+      }
+      if (state.speechText && time >= state.speechUntil) {
+        state.speechText = null
+        state.speechCooldownUntil = time + SPEECH_COOLDOWN
+      }
+      motion.current.walking = result.moving
+      motion.current.viewing = state.mode === 'viewing'
+      motion.current.speech = state.speechText
+      motion.current.yaw = yaw.current
+      return
+    }
 
     // Primeira rota: do estacionamento ate a primeira obra.
     if (!state.started) {
@@ -424,14 +446,18 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
       position.x = Math.max(WALK_BOUNDS.minX, Math.min(WALK_BOUNDS.maxX, position.x))
 
       // Versao inicial: sempre clampa Z (recria a armadilha na porta).
-      // Versao atual: libera o corredor ao sair.
+      // Versao atual: a grade inclui os anexos abertos e libera a porta na saída.
       const legacy = isLegacyNpcs()
       const isSaindo = state.mode === 'leaving' || state.mode === 'exiting'
       const nearDoor =
         Math.abs(position.x - DOOR_LEFT_X) < DOOR_CORRIDOR_W ||
         Math.abs(position.x - DOOR_RIGHT_X) < DOOR_CORRIDOR_W
-      if (legacy || !(isSaindo && nearDoor)) {
+      if (legacy) {
         position.z = Math.max(WALK_BOUNDS.minZ, Math.min(WALK_BOUNDS.maxZ, position.z))
+      } else if (!(isSaindo && nearDoor) && !isWalkable(position.x, position.z)) {
+        const back = nearestWalkable(position.x, position.z)
+        position.x = back.x
+        position.z = back.z
       }
     }
 

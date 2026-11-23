@@ -8,6 +8,7 @@ import { playerPosRef } from '../systems/proximityRefs'
 import { publishPose, isMultiplayerConnected, POSE_INTERVAL_MS } from '../systems/multiplayer'
 import VisitorModel from './VisitorModel'
 import { getAnnexRoomBounds } from '../data/museumLayout'
+import { groundMoveAxes } from '../systems/groundMove'
 
 // ---------- Constantes de locomocao ----------
 const WALK_SPEED = 5 // metros/segundo
@@ -15,10 +16,10 @@ const EYE_HEIGHT = 1.7 // altura dos olhos acima do chao (capsule center em y=0.
 const LOOK_SENSITIVITY = 0.0025 // sensibilidade do arraste (mobile)
 const PITCH_LIMIT = Math.PI / 2 - 0.1 // trava o olhar para cima/baixo
 
-// Camera em terceira pessoa
-const THIRD_PERSON_DISTANCE = 5.0 // distancia atras do jogador (aumentado de 4.0 para 5.0)
-const THIRD_PERSON_HEIGHT = 2.0 // altura da camera acima do chao (aumentado de 1.5 para 2.0)
-const THIRD_PERSON_MIN_DISTANCE = 1.5 // distancia minima quando ha colisao
+// O modelo aponta para +Z. A câmera olha para -Z local, então o corpo
+// fica virado PI à frente do yaw da câmera e recuado para não entrar no near plane.
+const BODY_YAW_OFFSET = Math.PI
+const BODY_BACK = 0.05
 
 // ---------- Limites do mundo (fora daqui e vazio infinito) ----------
 // A sala tem 28 x 38; acrescentamos margem para o jardim/estacionamento externos.
@@ -36,11 +37,7 @@ const SPAWN_POS = { x: 0, y: 2, z: 12 } // posicao inicial padrao
 const frontVector = new THREE.Vector3()
 const sideVector = new THREE.Vector3()
 const direction = new THREE.Vector3()
-const worldUp = new THREE.Vector3(0, 1, 0)
 const camEuler = new THREE.Euler()
-const thirdPersonTarget = new THREE.Vector3() // posicao alvo da camera em 3rd person
-const thirdPersonOffset = new THREE.Vector3() // offset relativo ao jogador
-const thirdPersonLookAt = new THREE.Vector3() // ponto onde a camera olha
 
 /**
  * Player: corpo fisico em primeira pessoa.
@@ -66,7 +63,6 @@ export default function Player({ position = [0, 2, 12] }) {
   const { camera, gl } = useThree()
 
   const isMobile = useGameStore((s) => s.isMobile)
-  const cameraMode = useGameStore((s) => s.cameraMode)
   const playerAppearance = useGameStore((s) => s.playerAppearance)
   const playerOutfit = useGameStore((s) => s.playerOutfit)
   const playerScale = useGameStore((s) => s.playerScale)
@@ -103,7 +99,7 @@ export default function Player({ position = [0, 2, 12] }) {
       ArrowRight: 'right',
     }
 
-    /** Ignora WASD/R/V enquanto o usuario digita (nick, etc.) ou o jogo nao comecou. */
+    /** Ignora WASD/R enquanto o usuario digita (nick, etc.) ou o jogo nao comecou. */
     const shouldIgnoreKeyboard = () => {
       const { isStarted, isMovementPaused } = useGameStore.getState()
       if (!isStarted || isMovementPaused) return true
@@ -117,14 +113,7 @@ export default function Player({ position = [0, 2, 12] }) {
 
     const onKeyDown = (e) => {
       if (shouldIgnoreKeyboard()) return
-      
-      // Toggle de camera com V
-      if (e.code === 'KeyV') {
-        useGameStore.getState().toggleCameraMode()
-        e.preventDefault()
-        return
-      }
-      
+
       if (e.code === 'KeyR') {
         resetPosition()
         return
@@ -202,9 +191,9 @@ export default function Player({ position = [0, 2, 12] }) {
     const body = bodyRef.current
     if (!body) return
 
-    const { isMovementPaused, isMobile: mobile, isPointerLocked, cameraMode: mode } = useGameStore.getState()
+    const { isMovementPaused, isMobile: mobile, isPointerLocked } = useGameStore.getState()
 
-    // 1) Camera acompanha o corpo
+    // 1) Camera em primeira pessoa, na altura dos olhos
     const t = body.translation()
 
     // Barreira de mundo: se saiu dos limites, teleporta de volta ao spawn
@@ -221,68 +210,11 @@ export default function Player({ position = [0, 2, 12] }) {
     playerPosRef.current[1] = t.y
     playerPosRef.current[2] = t.z
 
-    // Camera: primeira pessoa (altura dos olhos) ou terceira pessoa (chase cam)
-    if (mode === 'first') {
-      // Primeira pessoa: camera na altura dos olhos
-      camera.position.set(t.x, t.y + EYE_HEIGHT, t.z)
-    } else {
-      // Terceira pessoa: posiciona atras do jogador e olha para ele
-      let lookYaw = yaw.current
-      if (!mobile) {
-        camEuler.setFromQuaternion(camera.quaternion, 'YXZ')
-        lookYaw = camEuler.y
-      }
-      
-      // Offset atras do jogador baseado no yaw da camera
-      const targetDistance = THIRD_PERSON_DISTANCE
-      thirdPersonOffset.set(
-        Math.sin(lookYaw) * targetDistance,
-        0,
-        Math.cos(lookYaw) * targetDistance
-      )
-      
-      // Posicao alvo da camera (atras do jogador)
-      const targetX = t.x - thirdPersonOffset.x
-      const targetY = t.y + THIRD_PERSON_HEIGHT
-      const targetZ = t.z - thirdPersonOffset.z
-      
-      // Posiciona camera com suavizacao leve apenas no inicio do movimento
-      // para evitar "saltos" bruscos mas manter responsividade
-      const currentDist = camera.position.distanceTo(new THREE.Vector3(targetX, targetY, targetZ))
-      const lerpFactor = currentDist > 10 ? 0.3 : 1.0 // Suaviza apenas se muito longe
-      
-      camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetX, lerpFactor)
-      camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetY, lerpFactor)
-      camera.position.z = THREE.MathUtils.lerp(camera.position.z, targetZ, lerpFactor)
-      
-      // Camera olha para o jogador (altura do torso)
-      thirdPersonLookAt.set(t.x, t.y + 1.3, t.z)
-      camera.lookAt(thirdPersonLookAt)
-    }
+    camera.position.set(t.x, t.y + EYE_HEIGHT, t.z)
 
-    // Sync pose mesmo quando pausado (outros veem o avatar parado)
-    const publishNow = () => {
-      if (!isMultiplayerConnected()) return
-      const now = performance.now()
-      if (now - lastPosePub.current < POSE_INTERVAL_MS) return
-      lastPosePub.current = now
-      let lookYaw = yaw.current
-      let lookPitch = pitch.current
-      if (!mobile) {
-        camEuler.setFromQuaternion(camera.quaternion, 'YXZ')
-        lookYaw = camEuler.y
-        lookPitch = camEuler.x
-      }
-      publishPose({
-        x: t.x,
-        z: t.z,
-        yaw: lookYaw,
-        pitch: lookPitch,
-        walking: wasMoving.current,
-      })
-    }
-
-    // 2) Look no mobile: consome o delta de arraste e aplica a camera
+    // 2) Look. No desktop o PointerLockControls gira a câmera.
+    let lookYaw = yaw.current
+    let lookPitch = pitch.current
     if (mobile) {
       const look = useGameStore.getState().consumeLook()
       if (look.x !== 0 || look.y !== 0) {
@@ -290,14 +222,35 @@ export default function Player({ position = [0, 2, 12] }) {
         pitch.current -= look.y * LOOK_SENSITIVITY
         pitch.current = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch.current))
       }
-      camera.rotation.set(pitch.current, yaw.current, 0, 'YXZ')
-      headLookRef.current.pitch = pitch.current
-      headLookRef.current.yaw = yaw.current
+      lookYaw = yaw.current
+      lookPitch = pitch.current
+      camera.rotation.set(lookPitch, lookYaw, 0, 'YXZ')
     } else {
-      // Desktop: extrai look da camera
       camEuler.setFromQuaternion(camera.quaternion, 'YXZ')
-      headLookRef.current.pitch = camEuler.x
-      headLookRef.current.yaw = camEuler.y
+      lookYaw = camEuler.y
+      lookPitch = camEuler.x
+    }
+
+    // O modelo olha para +Z; a câmera olha para -Z. Sem esse PI o corpo
+    // fica de costas para o movimento e as pernas parecem ficar para trás.
+    const bodyYaw = lookYaw + BODY_YAW_OFFSET
+    if (visitorGroupRef.current) visitorGroupRef.current.rotation.y = bodyYaw
+    headLookRef.current.pitch = lookPitch
+    headLookRef.current.yaw = 0
+
+    // Sync pose mesmo quando pausado (outros veem o avatar parado, de frente)
+    const publishNow = () => {
+      if (!isMultiplayerConnected()) return
+      const now = performance.now()
+      if (now - lastPosePub.current < POSE_INTERVAL_MS) return
+      lastPosePub.current = now
+      publishPose({
+        x: t.x,
+        z: t.z,
+        yaw: bodyYaw,
+        pitch: lookPitch,
+        walking: wasMoving.current,
+      })
     }
 
     // 3) Se pausado (modal / nao iniciado) ou mouse livre no desktop: zera o plano XZ
@@ -325,14 +278,11 @@ export default function Player({ position = [0, 2, 12] }) {
       inputRight = (k.right ? 1 : 0) - (k.left ? 1 : 0)
     }
 
-    // 5) Direcao no referencial da camera, projetada no chao (ignora pitch)
-    camera.getWorldDirection(frontVector)
-    frontVector.y = 0
-    if (frontVector.lengthSq() > 1e-6) frontVector.normalize()
-    else frontVector.set(0, 0, -1)
-
-    sideVector.crossVectors(frontVector, worldUp)
-    if (sideVector.lengthSq() > 1e-6) sideVector.normalize()
+    // 5) Rumo no chão só pelo yaw. O vetor de visão inteiro zera
+    //    (e o fallback antigo andava para trás) com o olhar no limite.
+    const axes = groundMoveAxes(lookYaw)
+    frontVector.set(axes.forwardX, 0, axes.forwardZ)
+    sideVector.set(axes.rightX, 0, axes.rightZ)
 
     direction
       .copy(frontVector)
@@ -348,18 +298,7 @@ export default function Player({ position = [0, 2, 12] }) {
     body.setLinvel({ x: direction.x, y: linvel.y, z: direction.z }, true)
     wasMoving.current = direction.lengthSq() > 0.01
     visitorMotionRef.current.walking = wasMoving.current
-    
-    // 7) Atualiza rotacao do VisitorModel para seguir o look da camera em 360°
-    // Funciona em AMBOS os modos (1ª e 3ª pessoa)
-    if (visitorGroupRef.current) {
-      let lookYaw = yaw.current
-      if (!mobile) {
-        camEuler.setFromQuaternion(camera.quaternion, 'YXZ')
-        lookYaw = camEuler.y
-      }
-      visitorGroupRef.current.rotation.y = lookYaw
-    }
-    
+
     publishNow()
   })
 
@@ -380,17 +319,17 @@ export default function Player({ position = [0, 2, 12] }) {
         {/* CapsuleCollider(args=[meiaAltura, raio]) -> altura total ~ 2m */}
         <CapsuleCollider args={[0.6, 0.4]} />
         
-        {/* VisitorModel: renderiza o corpo do jogador */}
-        {(cameraMode === 'third' || cameraMode === 'first') && playerAppearance && (
+        {playerAppearance && (
           <group ref={visitorGroupRef}>
-            <VisitorModel
-              appearance={playerAppearance}
-              outfit={playerOutfit}
-              scale={playerScale}
-              motion={visitorMotionRef}
-              hideHead={cameraMode === 'first'}
-              headLook={headLookRef}
-            />
+            <group position={[0, 0, -BODY_BACK]} scale={playerScale}>
+              <VisitorModel
+                appearance={playerAppearance}
+                outfit={playerOutfit}
+                motion={visitorMotionRef}
+                hideHead
+                headLook={headLookRef}
+              />
+            </group>
           </group>
         )}
       </RigidBody>

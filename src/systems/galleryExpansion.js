@@ -43,6 +43,13 @@ export function annexRoomBounds(annexIndex, halfD, annexDepth, halfW) {
   }
 }
 
+/** Quadro da sala principal, ou de um anexo cujo índice (1-based) já abriu. */
+export function frameIsOpen(frameId, annexCount) {
+  const match = /^annex(\d+)/.exec(String(frameId || ''))
+  if (!match) return true
+  return Number(match[1]) <= clampAnnexCount(annexCount)
+}
+
 /** Alturas Z dos quadros laterais, sempre dentro da sala. */
 export function annexFrameZs(annexIndex, halfD, annexDepth) {
   const bounds = annexRoomBounds(annexIndex, halfD, annexDepth, 1)
