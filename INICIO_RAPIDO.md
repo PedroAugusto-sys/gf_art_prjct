@@ -84,7 +84,7 @@ Abra: **http://localhost:5173**
    - Mobile: joystick virtual + toque
 3. **Ver obras**: Aproxime-se e pressione `E`
 4. **Publicar obras**: Clique no botão verde flutuante "Publicar Obra"
-5. **Expandir galeria**: Clique no botão azul flutuante "Expandir Galeria"
+5. **Expandir galeria**: Solte o mouse com `Esc` e clique em "Expandir Galeria", ou pressione `G`
 
 ---
 

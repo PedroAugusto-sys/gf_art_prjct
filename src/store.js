@@ -146,18 +146,8 @@ export const useGameStore = create((set, get) => ({
       return
     }
     set({ isPointerLocked: value })
-
-    // Com pointer lock, o ESC e consumido pelo browser e o keydown nao chega.
-    // Sair do lock (ESC) enquanto joga → menu de versoes.
-    if (prev && !value) {
-      const skip = skipVersionMenuOnUnlock
-      skipVersionMenuOnUnlock = false
-      if (!skip && get().isStarted && !get().isMobile && !get().selectedArtwork) {
-        queueMicrotask(() => {
-          if (get().isStarted) get().returnToVersionSelect()
-        })
-      }
-    }
+    // ESC só solta o mouse. O menu continua no botão Menu.
+    if (prev && !value) skipVersionMenuOnUnlock = false
   },
 
   registerPointerControls: (lock, unlock) => {

@@ -126,7 +126,9 @@ npm run build
 - **WASD / Setas**: Movimento
 - **Mouse**: Olhar ao redor (pointer lock)
 - **E**: Ver obra (quando próximo)
-- **ESC**: Menu / Trocar versão
+- **G**: Expandir galeria
+- **ESC**: Soltar o mouse (os botões da HUD ficam clicáveis; clique na cena para olhar de novo)
+- **Menu**: Trocar versão
 
 ### Mobile
 - **Joystick esquerdo**: Movimento

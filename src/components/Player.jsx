@@ -8,6 +8,7 @@ import { playerPosRef } from '../systems/proximityRefs'
 import { publishPose, isMultiplayerConnected, POSE_INTERVAL_MS } from '../systems/multiplayer'
 import VisitorModel from './VisitorModel'
 import { getAnnexRoomBounds } from '../data/museumLayout'
+import { groundMoveAxes } from '../systems/groundMove'
 
 // ---------- Constantes de locomocao ----------
 const WALK_SPEED = 5 // metros/segundo
@@ -36,7 +37,6 @@ const SPAWN_POS = { x: 0, y: 2, z: 12 } // posicao inicial padrao
 const frontVector = new THREE.Vector3()
 const sideVector = new THREE.Vector3()
 const direction = new THREE.Vector3()
-const worldUp = new THREE.Vector3(0, 1, 0)
 const camEuler = new THREE.Euler()
 
 /**
@@ -278,14 +278,11 @@ export default function Player({ position = [0, 2, 12] }) {
       inputRight = (k.right ? 1 : 0) - (k.left ? 1 : 0)
     }
 
-    // 5) Direcao no referencial da camera, projetada no chao (ignora pitch)
-    camera.getWorldDirection(frontVector)
-    frontVector.y = 0
-    if (frontVector.lengthSq() > 1e-6) frontVector.normalize()
-    else frontVector.set(0, 0, -1)
-
-    sideVector.crossVectors(frontVector, worldUp)
-    if (sideVector.lengthSq() > 1e-6) sideVector.normalize()
+    // 5) Rumo no chão só pelo yaw. O vetor de visão inteiro zera
+    //    (e o fallback antigo andava para trás) com o olhar no limite.
+    const axes = groundMoveAxes(lookYaw)
+    frontVector.set(axes.forwardX, 0, axes.forwardZ)
+    sideVector.set(axes.rightX, 0, axes.rightZ)
 
     direction
       .copy(frontVector)
