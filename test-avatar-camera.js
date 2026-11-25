@@ -48,6 +48,15 @@ arts[0] = { ...arts[0], title: 'Título novo da sessão', description: 'DESCRIÇ
 const renamed = pickPositiveLine('obra-01')
 assert.match(renamed, /Título novo da sessão/)
 assert.doesNotMatch(renamed, /Raposa|Noite Estrelada|DESCRI/)
+arts[0] = { ...arts[0], title: 'Título', description: 'Descrição' }
+const literal = Array.from({ length: 12 }, () => pickPositiveLine('obra-01'))
+assert.ok(literal.every((phrase) => phrase.includes('"Título"')))
+assert.ok(literal.every((phrase) => !phrase.includes('esta obra') && !phrase.includes('Descrição')))
+arts[0] = { ...arts[0], title: 'Teste', description: 'notas do quadro' }
+const named = Array.from({ length: 40 }, () => pickPositiveLine('obra-01'))
+assert.ok(named.every((phrase) => phrase.includes('"Teste"')))
+assert.ok(named.every((phrase) => !phrase.includes('notas do quadro')))
+assert.ok(named.some((phrase) => phrase.includes('Gostei muito de "Teste"')))
 arts[0] = { ...arts[0], title: 'TITULO DA OBRA', description: 'DESCRIÇÃO' }
 const placeholder = Array.from({ length: 8 }, () => pickPositiveLine('obra-01'))
 assert.ok(placeholder.every((phrase) => phrase.includes('esta obra')))

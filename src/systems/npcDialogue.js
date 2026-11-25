@@ -44,29 +44,21 @@ export function artworkTitle(artId) {
   return title || null
 }
 
-const PLACEHOLDER_TITLES = new Set([
-  'titulo da obra',
-  'titulo',
-  'descricao',
-  'sem titulo',
-  'obra',
-  'title',
-  'description',
-  'placeholder',
-  'sua obra',
-  'nome da obra',
-])
+function titleKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
 
 function spokenTitle(artId) {
   const title = artworkTitle(artId)
   if (!title) return 'esta obra'
   const clean = title.replace(/\s*\(exemplo\)\s*$/i, '').trim()
-  const key = clean
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-  if (!key || PLACEHOLDER_TITLES.has(key)) return 'esta obra'
+  // Só o template interno. Um título digitado, mesmo curto, é falado.
+  if (!titleKey(clean) || titleKey(clean) === 'titulo da obra') return 'esta obra'
   return clean
 }
 

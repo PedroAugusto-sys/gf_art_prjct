@@ -158,6 +158,18 @@ export const useGameStore = create((set, get) => ({
   requestPublishOnFrame: (frameId) => set({ publishFrameId: frameId || null }),
   clearPublishRequest: () => set({ publishFrameId: null }),
   setFrameComposerOpen: (value) => set({ frameComposerOpen: !!value }),
+  publishDraft: null,
+  beginPublish: (draft) => set({
+    publishDraft: draft || null,
+    frameComposerOpen: true,
+    publishFrameId: null,
+    isMovementPaused: true,
+  }),
+  endPublish: () => set({
+    publishDraft: null,
+    frameComposerOpen: false,
+    isMovementPaused: !get().isStarted || !!get().selectedArtwork,
+  }),
 
   // Pausa explicita do movimento (menu, modal de obra, etc.).
   // isMovementPaused = true quando ha uma obra aberta OU quando o jogo nao comecou.
@@ -228,6 +240,7 @@ export const useGameStore = create((set, get) => ({
       focusedEmptyFrameId: null,
       focusedExampleArtwork: null,
       publishFrameId: null,
+      publishDraft: null,
       frameComposerOpen: false,
       isPointerLocked: false,
       mpReady: false,

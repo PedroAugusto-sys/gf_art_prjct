@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Html } from '@react-three/drei'
+import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { registerArtwork } from '../systems/artworkTargets'
 import { isExampleArtwork } from '../systems/frameTexture'
 import { useFrameTexture } from '../hooks/useFrameTexture'
-import PublishForm from './PublishForm'
 import FrameBorder, { CANVAS_DEPTH, CANVAS_Z, FRAME_DEPTH } from './FrameBorder'
 
 /**
@@ -24,7 +22,6 @@ export default function ArtworkFrame({ artwork }) {
   const published = communityArtworks.find((art) => art.frameId === id) || null
   const example = isExampleArtwork(artwork) && !published
 
-  const [showUploadUI, setShowUploadUI] = useState(false)
   const canvasMatRef = useRef(null)
   const meshRef = useRef(null)
   const texture = useFrameTexture(published || artwork, width, height, canvasMatRef)
@@ -51,22 +48,13 @@ export default function ArtworkFrame({ artwork }) {
     if (!example || publishFrameId !== id) return
     useGameStore.getState().clearPublishRequest()
     useGameStore.getState().unlockPointer()
-    useGameStore.getState().setFrameComposerOpen(true)
-    setShowUploadUI(true)
-  }, [publishFrameId, id, example])
+    useGameStore.getState().beginPublish({ frameId: id, existing: published })
+  }, [publishFrameId, id, example, published])
 
   const frameMaterial = useMemo(
     () => new THREE.MeshStandardMaterial({ color: '#2b2b2b', roughness: 0.5, metalness: 0.3 }),
     []
   )
-
-  const closeUpload = () => {
-    setShowUploadUI(false)
-    useGameStore.getState().setFrameComposerOpen(false)
-    if (!useGameStore.getState().isMobile) {
-      setTimeout(() => useGameStore.getState().lockPointer(), 100)
-    }
-  }
 
   return (
     <group position={position} rotation={rotation}>
@@ -119,11 +107,6 @@ export default function ArtworkFrame({ artwork }) {
       )}
       <group name={`artwork-${title}`} />
 
-      {showUploadUI && (
-        <Html center distanceFactor={5} style={{ pointerEvents: 'auto' }}>
-          <PublishForm frameId={id} existing={published} onClose={closeUpload} />
-        </Html>
-      )}
     </group>
   )
 }

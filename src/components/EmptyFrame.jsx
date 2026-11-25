@@ -7,7 +7,6 @@ import { publishGalleryState, isRoomHost, isMultiplayerOffline } from '../system
 import { deleteArtwork, reportArtwork, getSessionToken } from '../systems/temporaryArtworks'
 import { registerEmptyFrame } from '../systems/artworkTargets'
 import { useFrameTexture } from '../hooks/useFrameTexture'
-import PublishForm from './PublishForm'
 import { getStableAuthorId } from '../systems/publishFrame'
 import FrameBorder, { CANVAS_DEPTH, CANVAS_Z, FRAME_DEPTH } from './FrameBorder'
 
@@ -23,7 +22,6 @@ const _framePos = new THREE.Vector3()
  * Permite upload de imagem para publicação na sala.
  */
 export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameId }) {
-  const [showUploadUI, setShowUploadUI] = useState(false)
   const [showTitle, setShowTitle] = useState(false)
   const meshRef = useRef(null)
   const matRef = useRef(null)
@@ -33,8 +31,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const publishFrameId = useGameStore((s) => s.publishFrameId)
   const playerName = useGameStore((s) => s.playerName)
   const unlockPointer = useGameStore((s) => s.unlockPointer)
-  const lockPointer = useGameStore((s) => s.lockPointer)
-  const isMobile = useGameStore((s) => s.isMobile)
 
   const [width, height] = size
 
@@ -55,19 +51,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const handleInteract = () => {
     if (!canEdit || artwork) return
     unlockPointer()
-    useGameStore.getState().setFrameComposerOpen(true)
-    setShowUploadUI(true)
-  }
-
-  const closeModal = () => {
-    setShowUploadUI(false)
-    useGameStore.getState().setFrameComposerOpen(false)
-    if (!isMobile) {
-      // Pequeno delay para evitar race condition com pointer lock
-      setTimeout(() => {
-        lockPointer()
-      }, 100)
-    }
+    useGameStore.getState().beginPublish({ frameId, existing: artwork || null })
   }
 
   useEffect(() => {
@@ -120,17 +104,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     }
   })
 
-  useEffect(() => {
-    if (!showUploadUI) return
-    const handleKey = (e) => {
-      if (e.key === 'Escape') {
-        closeModal()
-      }
-    }
-    window.addEventListener('keydown', handleKey)
-    return () => window.removeEventListener('keydown', handleKey)
-  }, [showUploadUI])
-
   return (
     <group position={position} rotation={rotation}>
       <FrameBorder width={width} height={height} material={FRAME_MATERIAL} />
@@ -153,13 +126,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
           {...CANVAS_DEPTH}
         />
       </mesh>
-
-      {showUploadUI && (
-        <Html center distanceFactor={5} style={{ pointerEvents: 'auto' }}>
-          <PublishForm frameId={frameId} existing={artwork} onClose={closeModal} />
-        </Html>
-      )}
-
 
       {artwork && showTitle && (
         <Html position={[0, -height / 2 - 0.3, FRAME_DEPTH]} center distanceFactor={10}>

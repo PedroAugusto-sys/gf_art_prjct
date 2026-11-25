@@ -22,6 +22,7 @@ export default function UIOverlay() {
   const focusedEmptyFrameId = useGameStore((s) => s.focusedEmptyFrameId)
   const focusedExampleArtwork = useGameStore((s) => s.focusedExampleArtwork)
   const frameComposerOpen = useGameStore((s) => s.frameComposerOpen)
+  const publishDraft = useGameStore((s) => s.publishDraft)
   const isPointerLocked = useGameStore((s) => s.isPointerLocked)
   const beginPlaying = useGameStore((s) => s.beginPlaying)
   const closeArtwork = useGameStore((s) => s.closeArtwork)
@@ -462,14 +463,18 @@ export default function UIOverlay() {
                       }}
                     />
                     <div className="w-full max-w-xl rounded-2xl bg-neutral-950/95 p-5 text-left text-white shadow-2xl ring-1 ring-white/10">
-                      <h2 className="text-xl font-semibold sm:text-2xl">{selectedArtwork.title}</h2>
-                      <p className="mt-1 text-sm text-white/60">
-                        {selectedArtwork.artist}
-                        {selectedArtwork.year ? ` - ${selectedArtwork.year}` : ''}
-                      </p>
-                      <p className="mt-4 max-h-[28vh] overflow-y-auto text-base leading-relaxed whitespace-pre-wrap text-white/85">
-                        {selectedArtwork.description || 'Sem descrição.'}
-                      </p>
+                      <h2 className="text-xl font-semibold sm:text-2xl">{selectedArtwork.title || 'Sem título'}</h2>
+                      {selectedArtwork.artist && (
+                        <p className="mt-1 text-sm text-white/60">
+                          por {selectedArtwork.artist}
+                          {selectedArtwork.year ? ` - ${selectedArtwork.year}` : ''}
+                        </p>
+                      )}
+                      {selectedArtwork.description ? (
+                        <p className="mt-4 max-h-[28vh] overflow-y-auto text-base leading-relaxed whitespace-pre-wrap text-white/85">
+                          {selectedArtwork.description}
+                        </p>
+                      ) : null}
                       <div className="mt-5 flex flex-wrap gap-3">
                         {canEditArtwork(selectedArtwork) && (
                           <button
@@ -548,6 +553,20 @@ export default function UIOverlay() {
               {communityArtworks.length}
             </span>
           </button>
+        </div>
+      )}
+
+      {publishDraft && (
+        <div className="pointer-events-auto fixed inset-0 z-[2200] flex items-start justify-center overflow-y-auto bg-black/75 px-4 py-8">
+          <PublishForm
+            key={`${publishDraft.frameId}-${publishDraft.existing?.id || 'nova'}`}
+            frameId={publishDraft.frameId}
+            existing={publishDraft.existing}
+            onClose={() => {
+              useGameStore.getState().endPublish()
+              if (!isMobile) setTimeout(() => lockPointer(), 100)
+            }}
+          />
         </div>
       )}
 
