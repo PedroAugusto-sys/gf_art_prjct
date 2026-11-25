@@ -15,6 +15,7 @@ import {
   HALF_W,
   ANNEX_DEPTH,
   ANNEX_CORRIDOR_WIDTH,
+  DOORS,
 } from '../data/museumLayout.js'
 
 // ---------- Parametros ----------
@@ -22,15 +23,18 @@ const CELL_SIZE  = 0.5           // resolucao: 0.5m da menos celulas que 0.4m (g
 const NPC_MARGIN = 0.30          // raio do corpo + folga
 const SAMPLE_STEP = 0.35         // passo do string pulling (era 0.2, muito fino)
 const MAX_ANNEXES = 2
-const CORRIDOR_HALF = ANNEX_CORRIDOR_WIDTH / 2 - 0.55
+const CORRIDOR_HALF = ANNEX_CORRIDOR_WIDTH / 2 - 0.35
 
 // A grade cobre a sala e os dois anexos desde o início.
 // Células de anexo nascem bloqueadas e abrem com setWalkAnnexCount,
 // sem realocar o A*.
 const minX = WALK_BOUNDS.minX
 const minZ = -HALF_D - MAX_ANNEXES * ANNEX_DEPTH + 1.2
+// A grade passa da fachada só no vão das portas, para o visitante
+// entrar pelo vidro em vez de parar encostado nele.
+const GRID_MAX_Z = HALF_D + 3.4
 const COLS = Math.ceil((WALK_BOUNDS.maxX - minX) / CELL_SIZE) + 1
-const ROWS = Math.ceil((WALK_BOUNDS.maxZ - minZ) / CELL_SIZE) + 1
+const ROWS = Math.ceil((GRID_MAX_Z - minZ) / CELL_SIZE) + 1
 const TOTAL = COLS * ROWS
 
 function toIdx(c, r)  { return r * COLS + c }
@@ -43,9 +47,21 @@ function cellZ(r)     { return minZ + r * CELL_SIZE + CELL_SIZE * 0.5 }
 const WALKABLE = new Uint8Array(TOTAL)
 let annexOpen = 0
 
-/** Chão livre: sala principal, anexos já abertos e o vão do corredor. */
+/** Vão da fachada sul. Fora dele o vidro e a alvenaria continuam bloqueados. */
+export function inSouthDoor(x, z) {
+  if (z > HALF_D + 3.2 || z < HALF_D - 1.8) return false
+  const half = DOORS.width * 0.5 - 0.22
+  for (let i = 0; i < DOORS.centers.length; i++) {
+    if (Math.abs(x - DOORS.centers[i]) <= half) return true
+  }
+  return false
+}
+
+/** Chão livre: sala principal, anexos já abertos, o vão do corredor e as portas. */
 function regionOpen(x, z, annexCount) {
-  if (x < WALK_BOUNDS.minX || x > WALK_BOUNDS.maxX || z > WALK_BOUNDS.maxZ) return false
+  if (x < WALK_BOUNDS.minX || x > WALK_BOUNDS.maxX) return false
+  if (inSouthDoor(x, z)) return true
+  if (z > WALK_BOUNDS.maxZ) return false
 
   const mainMinZ = -HALF_D + 1.2
   if (z >= mainMinZ) return true
