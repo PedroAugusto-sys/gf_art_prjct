@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
@@ -25,7 +24,6 @@ export default function ArtworkFrame({ artwork }) {
   const published = communityArtworks.find((art) => art.frameId === id) || null
   const example = isExampleArtwork(artwork) && !published
 
-  const [hovered, setHovered] = useState(false)
   const [showUploadUI, setShowUploadUI] = useState(false)
   const canvasMatRef = useRef(null)
   const meshRef = useRef(null)
@@ -58,20 +56,9 @@ export default function ArtworkFrame({ artwork }) {
   }, [publishFrameId, id, example])
 
   const frameMaterial = useMemo(
-    () => new THREE.MeshStandardMaterial({
-      color: '#2b2b2b',
-      roughness: 0.5,
-      metalness: 0.3,
-      emissive: '#d9cbb6',
-      emissiveIntensity: 0,
-    }),
+    () => new THREE.MeshStandardMaterial({ color: '#2b2b2b', roughness: 0.5, metalness: 0.3 }),
     []
   )
-
-  useFrame(() => {
-    const target = hovered ? 0.16 : 0
-    frameMaterial.emissiveIntensity = THREE.MathUtils.lerp(frameMaterial.emissiveIntensity, target, 0.18)
-  })
 
   const closeUpload = () => {
     setShowUploadUI(false)
@@ -79,15 +66,6 @@ export default function ArtworkFrame({ artwork }) {
     if (!useGameStore.getState().isMobile) {
       setTimeout(() => useGameStore.getState().lockPointer(), 100)
     }
-  }
-
-  const handleOver = (e) => {
-    e.stopPropagation()
-    setHovered(true)
-  }
-  const handleOut = (e) => {
-    e.stopPropagation()
-    setHovered(false)
   }
 
   return (
@@ -109,8 +87,6 @@ export default function ArtworkFrame({ artwork }) {
         ref={meshRef}
         position={[0, 0, CANVAS_Z]}
         receiveShadow={false}
-        onPointerOver={handleOver}
-        onPointerOut={handleOut}
         onClick={(e) => e.stopPropagation()}
         userData={{
           artworkId: id,

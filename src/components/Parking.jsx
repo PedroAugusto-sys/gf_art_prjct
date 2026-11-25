@@ -63,9 +63,9 @@ function Car({ x, z, rotY, colorIndex, rand }) {
   return (
     <group position={[x, 0.36, z]} rotation={[0, rotY, 0]}>
       {/* Corpo */}
-      <mesh geometry={bodyGeo} material={bodyColor} castShadow receiveShadow />
+      <mesh geometry={bodyGeo} material={bodyColor} receiveShadow />
       {/* Cabine / teto */}
-      <mesh geometry={cabinGeo} material={bodyColor} position={[0, 0.66, -cabinOffset]} castShadow />
+      <mesh geometry={cabinGeo} material={bodyColor} position={[0, 0.66, -cabinOffset]} />
       {/* Janelas (para-brisa frontal e traseiro, simplificados) */}
       <mesh position={[0, 0.66, -cabinOffset + 1.18]} rotation={[0.22, 0, 0]}>
         <planeGeometry args={[1.5, 0.52]} />

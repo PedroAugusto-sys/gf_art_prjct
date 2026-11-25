@@ -12,16 +12,16 @@ export default function FrameBorder({ width, height, material }) {
   const x = (width + bar) / 2
   return (
     <group>
-      <mesh material={material} position={[0, y, 0]} castShadow>
+      <mesh material={material} position={[0, y, 0]}>
         <boxGeometry args={[width + bar * 2, bar, FRAME_DEPTH]} />
       </mesh>
-      <mesh material={material} position={[0, -y, 0]} castShadow>
+      <mesh material={material} position={[0, -y, 0]}>
         <boxGeometry args={[width + bar * 2, bar, FRAME_DEPTH]} />
       </mesh>
-      <mesh material={material} position={[-x, 0, 0]} castShadow>
+      <mesh material={material} position={[-x, 0, 0]}>
         <boxGeometry args={[bar, height, FRAME_DEPTH]} />
       </mesh>
-      <mesh material={material} position={[x, 0, 0]} castShadow>
+      <mesh material={material} position={[x, 0, 0]}>
         <boxGeometry args={[bar, height, FRAME_DEPTH]} />
       </mesh>
     </group>

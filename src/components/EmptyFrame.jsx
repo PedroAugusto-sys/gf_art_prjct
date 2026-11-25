@@ -23,7 +23,6 @@ const _framePos = new THREE.Vector3()
  * Permite upload de imagem para publicação na sala.
  */
 export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameId }) {
-  const [hovered, setHovered] = useState(false)
   const [showUploadUI, setShowUploadUI] = useState(false)
   const [showTitle, setShowTitle] = useState(false)
   const meshRef = useRef(null)
@@ -105,12 +104,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const titleNear = useRef(false)
 
   useFrame(({ camera }) => {
-    const mat = matRef.current
-    if (mat) {
-      const target = hovered ? 0.15 : 0
-      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity ?? 0, target, 0.1)
-    }
-
     const mesh = meshRef.current
     if (!mesh || !artwork) {
       if (titleNear.current) {
@@ -146,14 +139,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         ref={meshRef}
         position={[0, 0, CANVAS_Z]}
         receiveShadow={false}
-        onPointerOver={(e) => {
-          e.stopPropagation()
-          setHovered(true)
-        }}
-        onPointerOut={(e) => {
-          e.stopPropagation()
-          setHovered(false)
-        }}
         onClick={(e) => e.stopPropagation()}
       >
         <planeGeometry args={[width, height]} />

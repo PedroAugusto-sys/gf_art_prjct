@@ -71,7 +71,7 @@ export const GARDEN_BEDS = [
   { id: 'bed-ne', pos: [4.6, -6], size: [3.2, 3.2], seed: 27 },
   { id: 'bed-sw', pos: [-4.6, 6], size: [3.2, 3.2], seed: 43 },
   { id: 'bed-se', pos: [4.6, 6], size: [3.2, 3.2], seed: 59 },
-  { id: 'bed-c1', pos: [-11.5, -16.5], size: [2.6, 2.6], seed: 71 },
+  // bed-c1 ficava na frente da obra do canto noroeste.
   { id: 'bed-c2', pos: [11.5, -16.5], size: [2.6, 2.6], seed: 83 },
   { id: 'bed-c3', pos: [-11.5, 16.5], size: [2.6, 2.6], seed: 97 },
   { id: 'bed-c4', pos: [11.5, 16.5], size: [2.6, 2.6], seed: 109 },
@@ -225,12 +225,12 @@ function makeTree({ x, z, baseY, height, seed }) {
   return { trunk, canopy }
 }
 
-function buildIndoorVegetation() {
+export function plantsForBeds(beds) {
   const trunks = []
   const canopy = []
   const shrubs = []
 
-  GARDEN_BEDS.forEach((bed) => {
+  beds.forEach((bed) => {
     const rand = makeRandom(bed.seed)
     const [bx, bz] = bed.pos
     const large = bed.size[0] > 3
@@ -268,6 +268,10 @@ function buildIndoorVegetation() {
   })
 
   return { trunks, canopy, shrubs }
+}
+
+function buildIndoorVegetation() {
+  return plantsForBeds(GARDEN_BEDS)
 }
 
 function buildOutdoorVegetation() {

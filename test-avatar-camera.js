@@ -38,14 +38,20 @@ assert.doesNotMatch(line, /exemplo/)
 
 const arts = [{ id: 'sessao-1', frameId: 'obra-01', title: 'Raposa na galeria', description: 'sépia e orelhas' }]
 globalThis.window = { useGameStore: { getState: () => ({ communityArtworks: arts }) } }
-const edited = Array.from({ length: 16 }, () => pickPositiveLine('obra-01'))
+const edited = Array.from({ length: 40 }, () => pickPositiveLine('obra-01'))
 assert.ok(edited.every((phrase) => phrase.includes('Raposa na galeria')))
-assert.ok(edited.every((phrase) => phrase.includes('sépia e orelhas')))
+assert.ok(edited.every((phrase) => !phrase.includes('sépia')))
 assert.ok(edited.every((phrase) => !phrase.includes('Noite Estrelada')))
-arts[0] = { ...arts[0], title: 'Título novo da sessão', description: '' }
+assert.ok(edited.some((phrase) => phrase.includes('Gostei muito')))
+assert.ok(edited.some((phrase) => phrase.includes('artista quis')))
+arts[0] = { ...arts[0], title: 'Título novo da sessão', description: 'DESCRIÇÃO' }
 const renamed = pickPositiveLine('obra-01')
 assert.match(renamed, /Título novo da sessão/)
-assert.doesNotMatch(renamed, /Raposa|Noite Estrelada/)
+assert.doesNotMatch(renamed, /Raposa|Noite Estrelada|DESCRI/)
+arts[0] = { ...arts[0], title: 'TITULO DA OBRA', description: 'DESCRIÇÃO' }
+const placeholder = Array.from({ length: 8 }, () => pickPositiveLine('obra-01'))
+assert.ok(placeholder.every((phrase) => phrase.includes('esta obra')))
+assert.ok(placeholder.every((phrase) => !/TITULO|DESCRI/i.test(phrase)))
 arts[0] = { ...arts[0], title: '   ' }
 assert.match(pickPositiveLine('obra-01'), /esta obra/)
 assert.doesNotMatch(pickPositiveLine('obra-01'), /Noite Estrelada/)

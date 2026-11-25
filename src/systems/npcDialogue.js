@@ -44,30 +44,42 @@ export function artworkTitle(artId) {
   return title || null
 }
 
+const PLACEHOLDER_TITLES = new Set([
+  'titulo da obra',
+  'titulo',
+  'descricao',
+  'sem titulo',
+  'obra',
+  'title',
+  'description',
+  'placeholder',
+  'sua obra',
+  'nome da obra',
+])
+
 function spokenTitle(artId) {
   const title = artworkTitle(artId)
   if (!title) return 'esta obra'
-  return title.replace(/\s*\(exemplo\)\s*$/i, '').trim() || 'esta obra'
-}
-
-function spokenDescription(artId) {
-  const live = liveArtwork(artId)
-  const text = String(live?.description || '').replace(/\s+/g, ' ').trim()
-  if (!text) return ''
-  return text.length > 72 ? `${text.slice(0, 69).trimEnd()}…` : text
+  const clean = title.replace(/\s*\(exemplo\)\s*$/i, '').trim()
+  const key = clean
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+  if (!key || PLACEHOLDER_TITLES.has(key)) return 'esta obra'
+  return clean
 }
 
 export function pickPositiveLine(artId) {
   const title = spokenTitle(artId)
-  const description = spokenDescription(artId)
   const phrases = [
     `Que cores em "${title}"!`,
+    `Gostei muito de "${title}".`,
+    `O que será que o artista quis dizer em "${title}"?`,
     `Olha o traço de "${title}".`,
-    `"${title}" me parou.`,
     `Adorei "${title}".`,
   ]
-  const phrase = phrases[Math.floor(Math.random() * phrases.length)]
-  return description ? `${phrase} ${description}` : phrase
+  return phrases[Math.floor(Math.random() * phrases.length)]
 }
 
 /** Cabe mais um balão agora? */
