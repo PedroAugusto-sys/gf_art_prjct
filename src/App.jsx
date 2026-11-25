@@ -46,7 +46,7 @@ export default function App() {
       <Canvas
         shadows={prototype ? false : 'soft'}
         dpr={isMobile ? [1, 1.2] : [1, 1.5]}
-        camera={{ fov: 70, near: 0.05, far: 300, position: [0, 2.8, 12] }}
+        camera={{ fov: 70, near: 0.12, far: 140, position: [0, 2.8, 12] }}
         gl={{ antialias: !isMobile, powerPreference: 'high-performance' }}
         performance={{ min: 0.5 }}
       >

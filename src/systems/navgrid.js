@@ -17,6 +17,7 @@ import {
   ANNEX_CORRIDOR_WIDTH,
   DOORS,
 } from '../data/museumLayout.js'
+import { annexObstacles } from './annexDecor.js'
 
 // ---------- Parametros ----------
 const CELL_SIZE  = 0.5           // resolucao: 0.5m da menos celulas que 0.4m (grade 28% menor)
@@ -33,6 +34,7 @@ const minZ = -HALF_D - MAX_ANNEXES * ANNEX_DEPTH + 1.2
 // A grade passa da fachada só no vão das portas, para o visitante
 // entrar pelo vidro em vez de parar encostado nele.
 const GRID_MAX_Z = HALF_D + 3.4
+const DECOR_OBSTACLES = annexObstacles(MAX_ANNEXES)
 const COLS = Math.ceil((WALK_BOUNDS.maxX - minX) / CELL_SIZE) + 1
 const ROWS = Math.ceil((GRID_MAX_Z - minZ) / CELL_SIZE) + 1
 const TOTAL = COLS * ROWS
@@ -85,10 +87,15 @@ function buildWalkable() {
       const cz = cellZ(r)
       let free = regionOpen(cx, cz, annexOpen)
       if (free) {
-        for (let o = 0; o < NPC_OBSTACLES.length; o++) {
+        for (let o = 0; o < NPC_OBSTACLES.length && free; o++) {
           const obs = NPC_OBSTACLES[o]
           const dx = cx - obs.x, dz = cz - obs.z
-          if (dx * dx + dz * dz < (obs.r + NPC_MARGIN) ** 2) { free = false; break }
+          if (dx * dx + dz * dz < (obs.r + NPC_MARGIN) ** 2) free = false
+        }
+        for (let o = 0; o < DECOR_OBSTACLES.length && free; o++) {
+          const obs = DECOR_OBSTACLES[o]
+          const dx = cx - obs.x, dz = cz - obs.z
+          if (dx * dx + dz * dz < (obs.r + NPC_MARGIN) ** 2) free = false
         }
       }
       WALKABLE[toIdx(c, r)] = free ? 1 : 0

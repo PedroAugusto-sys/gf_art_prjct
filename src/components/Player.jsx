@@ -9,7 +9,7 @@ import { publishPose, isMultiplayerConnected, POSE_INTERVAL_MS } from '../system
 import VisitorModel from './VisitorModel'
 import { getAnnexRoomBounds } from '../data/museumLayout'
 import { groundMoveAxes } from '../systems/groundMove'
-import { avatarMetrics, firstPersonBodyBack, firstPersonEyeY, thirdPersonRig } from '../systems/avatarCamera'
+import { avatarMetrics, firstPersonEyeY } from '../systems/avatarCamera'
 
 // ---------- Constantes de locomocao ----------
 const WALK_SPEED = 5 // metros/segundo
@@ -62,15 +62,11 @@ export default function Player({ position = [0, 2, 8] }) {
   const { camera, gl } = useThree()
 
   const isMobile = useGameStore((s) => s.isMobile)
-  const isStarted = useGameStore((s) => s.isStarted)
-  const isPointerLocked = useGameStore((s) => s.isPointerLocked)
   const playerAppearance = useGameStore((s) => s.playerAppearance)
   const playerOutfit = useGameStore((s) => s.playerOutfit)
   const playerScale = useGameStore((s) => s.playerScale)
   const metrics = avatarMetrics(playerScale)
-  const thirdPerson = isStarted && !isMobile && !isPointerLocked
   const facing = useRef(0)
-  const wasThird = useRef(false)
 
   // Estado de teclado guardado em ref (nao precisa re-renderizar)
   const keys = useRef({ forward: false, backward: false, left: false, right: false })
@@ -217,11 +213,9 @@ export default function Player({ position = [0, 2, 8] }) {
     playerPosRef.current[2] = t.z
 
     const scale = useGameStore.getState().playerScale
-    const showThird = !mobile && !isPointerLocked && useGameStore.getState().isStarted
 
-    // 2) Look. No desktop o PointerLockControls gira a câmera.
-    // Na terceira pessoa o yaw fica o da última primeira pessoa: ler o
-    // quaternion depois do lookAt faria o corpo girar sozinho.
+    // A câmera fica nos olhos. Alt, Esc e o modal de publicar soltam o
+    // mouse, mas não mudam a posição nem o yaw que já estava salvo.
     let lookYaw = facing.current
     let lookPitch = pitch.current
     if (mobile) {
@@ -235,27 +229,17 @@ export default function Player({ position = [0, 2, 8] }) {
       lookPitch = pitch.current
       facing.current = lookYaw
       camera.rotation.set(lookPitch, lookYaw, 0, 'YXZ')
-    } else if (!showThird) {
-      if (wasThird.current) {
-        camera.rotation.set(pitch.current, facing.current, 0, 'YXZ')
-        wasThird.current = false
-      }
+    } else if (isPointerLocked) {
       camEuler.setFromQuaternion(camera.quaternion, 'YXZ')
       lookYaw = camEuler.y
       lookPitch = camEuler.x
       facing.current = lookYaw
       pitch.current = lookPitch
+    } else {
+      camera.rotation.set(lookPitch, lookYaw, 0, 'YXZ')
     }
 
-    const feetY = t.y - avatarMetrics(scale).capsuleCenter
-    if (showThird) {
-      wasThird.current = true
-      const rig = thirdPersonRig(t.x, feetY, t.z, facing.current, scale)
-      camera.position.set(rig.camera.x, rig.camera.y, rig.camera.z)
-      camera.lookAt(rig.look.x, rig.look.y, rig.look.z)
-    } else {
-      camera.position.set(t.x, firstPersonEyeY(t.y, scale), t.z)
-    }
+    camera.position.set(t.x, firstPersonEyeY(t.y, scale), t.z)
 
     // O modelo olha para +Z; a câmera olha para -Z. Sem esse PI o corpo
     // fica de costas para o movimento e as pernas parecem ficar para trás.
@@ -345,13 +329,13 @@ export default function Player({ position = [0, 2, 8] }) {
         <CapsuleCollider args={[metrics.half, metrics.radius]} />
 
         {playerAppearance && (
-          <group ref={visitorGroupRef} position={[0, -metrics.capsuleCenter, 0]} visible={thirdPerson}>
-            <group position={[0, 0, thirdPerson ? 0 : -firstPersonBodyBack(playerScale)]} scale={playerScale}>
+          <group ref={visitorGroupRef} position={[0, -metrics.capsuleCenter, 0]} visible={false}>
+            <group scale={playerScale}>
               <VisitorModel
                 appearance={playerAppearance}
                 outfit={playerOutfit}
                 motion={visitorMotionRef}
-                hideHead={!thirdPerson}
+                hideHead
                 headLook={headLookRef}
               />
             </group>

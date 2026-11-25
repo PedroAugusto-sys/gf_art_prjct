@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useGameStore } from '../store'
 import { publishImageOnFrame } from '../systems/publishFrame'
 
@@ -8,8 +8,31 @@ export default function PublishForm({ frameId, existing, onClose, onSaved }) {
   const [title, setTitle] = useState(existing?.title || '')
   const [description, setDescription] = useState(existing?.description || '')
   const [file, setFile] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
+  const fileRef = useRef(null)
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl('')
+      return undefined
+    }
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  const onPick = (event) => {
+    const next = event.target.files?.[0] || null
+    if (next && !next.type.startsWith('image/')) {
+      setUploadError('Escolha um arquivo de imagem')
+      setFile(null)
+      return
+    }
+    setUploadError('')
+    setFile(next)
+  }
 
   const onSave = async () => {
     if (!existing && !file) {
@@ -92,16 +115,58 @@ export default function PublishForm({ frameId, existing, onClose, onSaved }) {
           resize: 'vertical',
         }}
       />
-      <label style={{ display: 'block', marginBottom: '12px', fontSize: '13px', color: '#fff' }}>
-        {file ? file.name : existing ? 'Trocar imagem (opcional)' : 'Escolher imagem'}
-        <input
-          type="file"
-          accept="image/*"
-          disabled={uploading}
-          onChange={(event) => setFile(event.target.files?.[0] || null)}
-          style={{ display: 'block', marginTop: '6px', fontSize: '12px' }}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        disabled={uploading}
+        onChange={onPick}
+        style={{ display: 'none' }}
+      />
+      <button
+        type="button"
+        disabled={uploading}
+        onClick={(e) => {
+          e.stopPropagation()
+          fileRef.current?.click()
+        }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px',
+          width: '100%',
+          marginBottom: '8px',
+          padding: '10px 12px',
+          borderRadius: '8px',
+          border: '1px solid rgba(255,255,255,0.35)',
+          background: 'rgba(255,255,255,0.12)',
+          color: 'white',
+          fontSize: '14px',
+          fontWeight: 600,
+          cursor: uploading ? 'not-allowed' : 'pointer',
+        }}
+      >
+        <span aria-hidden>📁</span>
+        {existing ? 'Trocar imagem' : 'Enviar imagem'}
+      </button>
+      {file && (
+        <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: 'rgba(255,255,255,0.75)' }}>{file.name}</p>
+      )}
+      {previewUrl && (
+        <img
+          src={previewUrl}
+          alt=""
+          style={{
+            width: '100%',
+            height: '120px',
+            objectFit: 'cover',
+            borderRadius: '8px',
+            marginBottom: '12px',
+            display: 'block',
+          }}
         />
-      </label>
+      )}
       {uploadError && (
         <div style={{ marginBottom: '12px', color: '#fca5a5', fontSize: '12px' }}>{uploadError}</div>
       )}

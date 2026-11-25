@@ -6,53 +6,68 @@
 import artworksData from '../data/artworks.json' with { type: 'json' }
 import { CROWD_QUALITY } from './crowdQuality.js'
 
-const POSITIVE_LINES = [
-  'Que cores lindas!',
-  'Olha esse traço...',
-  'Que composição.',
-  'Isso me acalmou.',
-  'Adorei este detalhe.',
-  'Fiquei sem palavras.',
-  'Que luz nessa tela.',
-  'Me fez parar.',
-  'Bonito demais.',
-  'Olha a textura.',
-  'Queria ver de perto.',
-  'Que obra forte.',
-  'Me fez pensar.',
-  'Vale a visita.',
-]
-
 const activeUntil = []
 
-function communityTitle(artId) {
+/** O mesmo array que a plaquinha lê. Nada fica guardado entre um comentário e o outro. */
+function liveArtworks() {
   const store = typeof window !== 'undefined' ? window.useGameStore : null
-  if (!store) return null
-  const arts = store.getState().communityArtworks || []
-  const found = arts.find((art) => art && (art.id === artId || art.frameId === artId))
-  return found?.title || null
+  const list = store?.getState?.().communityArtworks
+  return Array.isArray(list) ? list : []
 }
 
+function liveArtwork(artId) {
+  const arts = liveArtworks()
+  return (
+    arts.find((art) => art && art.frameId === artId) ||
+    arts.find((art) => art && art.id === artId) ||
+    null
+  )
+}
+
+function catalogArtwork(artId) {
+  return artworksData.artworks?.find((art) => art.id === artId) || null
+}
+
+/**
+ * Título que a plaquinha mostra agora.
+ * Obra publicada ou editada na sessão ganha do nome do template.
+ */
 export function artworkTitle(artId) {
   if (!artId) return null
-  const fromJson = artworksData.artworks?.find((art) => art.id === artId)
-  if (fromJson?.title) return fromJson.title
-  return communityTitle(artId)
+  const live = liveArtwork(artId)
+  if (live) {
+    const title = String(live.title || '').trim()
+    return title || null
+  }
+  const fromJson = catalogArtwork(artId)
+  const title = fromJson?.title ? String(fromJson.title).trim() : ''
+  return title || null
+}
+
+function spokenTitle(artId) {
+  const title = artworkTitle(artId)
+  if (!title) return 'esta obra'
+  return title.replace(/\s*\(exemplo\)\s*$/i, '').trim() || 'esta obra'
+}
+
+function spokenDescription(artId) {
+  const live = liveArtwork(artId)
+  const text = String(live?.description || '').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  return text.length > 72 ? `${text.slice(0, 69).trimEnd()}…` : text
 }
 
 export function pickPositiveLine(artId) {
-  const title = artworkTitle(artId)
-  const clean = title ? String(title).replace(/\s*\(exemplo\)\s*$/i, '') : ''
-  if (clean) {
-    const phrases = [
-      `Que cores em "${clean}"!`,
-      `Olha o traço de "${clean}".`,
-      `"${clean}" me parou.`,
-      `Adorei "${clean}".`,
-    ]
-    return phrases[Math.floor(Math.random() * phrases.length)]
-  }
-  return POSITIVE_LINES[Math.floor(Math.random() * POSITIVE_LINES.length)]
+  const title = spokenTitle(artId)
+  const description = spokenDescription(artId)
+  const phrases = [
+    `Que cores em "${title}"!`,
+    `Olha o traço de "${title}".`,
+    `"${title}" me parou.`,
+    `Adorei "${title}".`,
+  ]
+  const phrase = phrases[Math.floor(Math.random() * phrases.length)]
+  return description ? `${phrase} ${description}` : phrase
 }
 
 /** Cabe mais um balão agora? */

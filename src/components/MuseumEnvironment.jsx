@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { useGameStore } from '../store'
 import Vegetation from './Vegetation'
 import AnnexRoom from './AnnexRoom'
+import { AnnexTrees } from './AnnexDecor'
 import { createWallTexture, createWoodTexture } from '../systems/sceneTextures'
 import {
   ROOM,
@@ -372,6 +373,7 @@ export default function MuseumEnvironment() {
             />
           </group>
         ))}
+      {hasCommunityGallery && <AnnexTrees annexCount={annexCount} />}
     </group>
   )
 }

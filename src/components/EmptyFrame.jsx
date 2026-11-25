@@ -9,6 +9,7 @@ import { registerEmptyFrame } from '../systems/artworkTargets'
 import { useFrameTexture } from '../hooks/useFrameTexture'
 import PublishForm from './PublishForm'
 import { getStableAuthorId } from '../systems/publishFrame'
+import FrameBorder, { CANVAS_DEPTH, CANVAS_Z, FRAME_DEPTH } from './FrameBorder'
 
 const FRAME_MATERIAL = new THREE.MeshStandardMaterial({
   color: '#2b2b2b',
@@ -37,8 +38,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
   const isMobile = useGameStore((s) => s.isMobile)
 
   const [width, height] = size
-  const FRAME_DEPTH = 0.08
-  const FRAME_BORDER = 0.12
 
   const artwork = communityArtworks.find((art) => art.frameId === frameId)
   const isHost = isRoomHost() || isMultiplayerOffline()
@@ -141,13 +140,12 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
 
   return (
     <group position={position} rotation={rotation}>
-      <mesh material={FRAME_MATERIAL} castShadow>
-        <boxGeometry args={[width + FRAME_BORDER * 2, height + FRAME_BORDER * 2, FRAME_DEPTH]} />
-      </mesh>
+      <FrameBorder width={width} height={height} material={FRAME_MATERIAL} />
 
       <mesh
         ref={meshRef}
-        position={[0, 0, FRAME_DEPTH / 2 + 0.001]}
+        position={[0, 0, CANVAS_Z]}
+        receiveShadow={false}
         onPointerOver={(e) => {
           e.stopPropagation()
           setHovered(true)
@@ -167,6 +165,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
           roughness={0.8}
           metalness={0}
           map={artworkTexture}
+          {...CANVAS_DEPTH}
         />
       </mesh>
 

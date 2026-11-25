@@ -1,6 +1,7 @@
 import { RigidBody, CuboidCollider } from '@react-three/rapier'
 import { useMemo } from 'react'
 import { getAnnexRoomBounds, ROOM, ANNEX_CORRIDOR_WIDTH } from '../data/museumLayout'
+import { AnnexRoomDecor } from './AnnexDecor'
 
 /**
  * Sala anexa ao norte. Sem luzes próprias: uma luz nova recompila o shader
@@ -106,6 +107,8 @@ export default function AnnexRoom({ annexIndex, materials, openNorth = false }) 
             />
           </group>
         ))}
+
+        <AnnexRoomDecor annexIndex={annexIndex} />
       </RigidBody>
     </group>
   )
