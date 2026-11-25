@@ -8,6 +8,8 @@ import { generateAppearance, sanitizeNick } from '../systems/appearance'
 import { connectMultiplayer, publishGalleryState } from '../systems/multiplayer'
 import { nextAnnexCount } from '../systems/galleryExpansion'
 import { getVersionById } from '../data/versions'
+import { canEditArtwork } from '../systems/publishFrame'
+import PublishForm from './PublishForm'
 
 /**
  * UIOverlay: interface HTML sobreposta ao Canvas.
@@ -38,6 +40,7 @@ export default function UIOverlay() {
   const [nickError, setNickError] = useState('')
   const [joining, setJoining] = useState(false)
   const [offlineHint, setOfflineHint] = useState('')
+  const [editingArtwork, setEditingArtwork] = useState(false)
   /** Ignora clique/tap no backdrop logo apos abrir (ghost click do mesmo toque). */
   const artworkOpenedAt = useRef(0)
 
@@ -67,9 +70,11 @@ export default function UIOverlay() {
   }, [ensurePlayableVersion])
 
   // Marca o instante em que a obra abriu (anti ghost-click no backdrop).
+  // Só zera a edição quando troca de obra. Salvar a mesma ficha não reabre o efeito.
   useEffect(() => {
     if (selectedArtwork) artworkOpenedAt.current = performance.now()
-  }, [selectedArtwork])
+    setEditingArtwork(false)
+  }, [selectedArtwork?.id])
 
   const handleCloseArtwork = () => {
     if (performance.now() - artworkOpenedAt.current < 400) return
@@ -287,17 +292,10 @@ export default function UIOverlay() {
             Pressione E para publicar uma obra aqui
           </div>
           {focusedExampleArtwork && (
-            <button
-              type="button"
-              onClick={() => {
-                artworkOpenedAt.current = performance.now()
-                useGameStore.getState().openArtwork(focusedExampleArtwork)
-              }}
-              className="pointer-events-auto rounded-full bg-black/55 px-3 py-1.5 text-sm text-white/90 backdrop-blur-sm"
-            >
+            <div className="rounded-full bg-black/55 px-3 py-1.5 text-sm text-white/90 backdrop-blur-sm">
               <span className="mr-1 rounded border border-white/50 bg-white/10 px-1.5 py-0.5 font-mono text-xs">V</span>
               Ver exemplo
-            </button>
+            </div>
           )}
         </div>
       )}
@@ -377,7 +375,7 @@ export default function UIOverlay() {
       {/* ============ DICA PERMANENTE ============ */}
       {isStarted && !selectedArtwork && (isMobile || isPointerLocked) && !focusedArtwork && !focusedEmptyFrameId && (
         <div className="absolute left-1/2 top-4 -translate-x-1/2 rounded-full bg-black/40 px-4 py-1 text-xs text-white/70 backdrop-blur-sm">
-          {isMobile ? 'Aproxime-se de uma obra para interagir' : 'Aponte para uma obra e pressione E'}
+          {isMobile ? 'Aproxime-se de um quadro e use o botão' : 'Aponte para o quadro e pressione E'}
         </div>
       )}
 
@@ -420,11 +418,42 @@ export default function UIOverlay() {
               </button>
 
               {/* Imagem da obra (mesmo arquivo usado na textura 3D) */}
-              <div className="mb-6 w-full overflow-hidden rounded-lg bg-neutral-800">
+              {editingArtwork ? (
+                <PublishForm
+                  frameId={selectedArtwork.frameId}
+                  existing={{
+                    id: selectedArtwork.id,
+                    frameId: selectedArtwork.frameId,
+                    title: selectedArtwork.title,
+                    description: selectedArtwork.description,
+                    authorId: selectedArtwork.authorId,
+                    author: selectedArtwork.artist,
+                    dataUrl: String(selectedArtwork.imagePath || '').startsWith('data:')
+                      ? selectedArtwork.imagePath
+                      : null,
+                    url: String(selectedArtwork.imagePath || '').startsWith('data:')
+                      ? null
+                      : selectedArtwork.imagePath || null,
+                  }}
+                  onClose={() => setEditingArtwork(false)}
+                  onSaved={(artwork) => {
+                    useGameStore.getState().openArtwork({
+                      ...selectedArtwork,
+                      title: artwork.title,
+                      description: artwork.description,
+                      imagePath: artwork.dataUrl || artwork.url || selectedArtwork.imagePath,
+                      authorId: artwork.authorId,
+                    })
+                    setEditingArtwork(false)
+                  }}
+                />
+              ) : (
+                <>
+              <div className="mb-6 flex h-56 w-full items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
                 <img
                   src={selectedArtwork.imagePath}
                   alt={selectedArtwork.title}
-                  className="h-56 w-full object-cover"
+                  className="max-h-full max-w-full object-contain"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none'
                   }}
@@ -437,8 +466,19 @@ export default function UIOverlay() {
                 {selectedArtwork.year ? ` - ${selectedArtwork.year}` : ''}
               </p>
               <p className="mt-6 text-base leading-relaxed text-white/80">
-                {selectedArtwork.description}
+                {selectedArtwork.description || 'Sem descrição.'}
               </p>
+              {canEditArtwork(selectedArtwork) && (
+                <button
+                  type="button"
+                  onClick={() => setEditingArtwork(true)}
+                  className="mt-6 rounded-full bg-white px-4 py-2 text-sm font-semibold text-neutral-900"
+                >
+                  Editar obra
+                </button>
+              )}
+                </>
+              )}
             </motion.aside>
           </>
         )}

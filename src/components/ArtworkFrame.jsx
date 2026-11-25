@@ -20,7 +20,6 @@ export default function ArtworkFrame({ artwork }) {
   const { id, title, position, rotation, size } = artwork
   const [width, height] = size || [2, 1.5]
 
-  const openArtwork = useGameStore((s) => s.openArtwork)
   const communityArtworks = useGameStore((s) => s.communityArtworks)
   const publishFrameId = useGameStore((s) => s.publishFrameId)
   const playerName = useGameStore((s) => s.playerName)
@@ -40,8 +39,10 @@ export default function ArtworkFrame({ artwork }) {
         title: published.title || 'Obra',
         artist: published.author || playerName || 'Visitante',
         year: '',
-        description: 'Obra publicada nesta sala.',
+        description: published.description || '',
         imagePath: published.dataUrl || published.url || '',
+        authorId: published.authorId || null,
+        frameId: id,
       }
     : artwork
 
@@ -81,28 +82,10 @@ export default function ArtworkFrame({ artwork }) {
   const handleOver = (e) => {
     e.stopPropagation()
     setHovered(true)
-    document.body.style.cursor = 'pointer'
   }
   const handleOut = (e) => {
     e.stopPropagation()
     setHovered(false)
-    document.body.style.cursor = 'auto'
-  }
-  const handleClick = (e) => {
-    e.stopPropagation()
-    if (e.distance > 2.8) return
-    document.body.style.cursor = 'auto'
-    useGameStore.getState().unlockPointer()
-    if (published) {
-      openArtwork(viewArtwork)
-      return
-    }
-    if (example) {
-      useGameStore.getState().setFrameComposerOpen(true)
-      setShowUploadUI(true)
-      return
-    }
-    openArtwork(artwork)
   }
 
   return (
@@ -127,7 +110,7 @@ export default function ArtworkFrame({ artwork }) {
         position={[0, 0, FRAME_DEPTH / 2 + 0.001]}
         onPointerOver={handleOver}
         onPointerOut={handleOut}
-        onClick={handleClick}
+        onClick={(e) => e.stopPropagation()}
         userData={{
           artworkId: id,
           artwork: viewArtwork,

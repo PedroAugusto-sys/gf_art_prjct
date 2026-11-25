@@ -14,6 +14,7 @@ function sameArtworks(a, b) {
     if (a[i]?.frameId !== b[i]?.frameId) return false
     if (a[i]?.title !== b[i]?.title) return false
     if ((a[i]?.dataUrl || a[i]?.url || '') !== (b[i]?.dataUrl || b[i]?.url || '')) return false
+    if ((a[i]?.description || '') !== (b[i]?.description || '')) return false
   }
   return true
 }
