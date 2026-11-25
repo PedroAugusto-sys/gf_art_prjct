@@ -5,6 +5,7 @@ import {
   versionFromUrl,
   getVersionById,
   resolvePlayableVersion,
+  museumLocationHash,
 } from './data/versions'
 
 /**
@@ -284,9 +285,9 @@ export const useGameStore = create((set, get) => ({
     if (getVersionById(id)?.status !== 'playable') return
     set({ selectedVersionId: v.id })
     if (typeof window !== 'undefined') {
-      const next = `#r=${encodeURIComponent(v.roomCode)}`
+      const next = museumLocationHash(v.roomCode)
       if (window.location.hash !== next) {
-        window.history.replaceState(null, '', next)
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${next}`)
       }
     }
   },
@@ -297,9 +298,9 @@ export const useGameStore = create((set, get) => ({
     const playable = resolvePlayableVersion(DEFAULT_VERSION_ID)
     set({ selectedVersionId: playable.id })
     if (typeof window !== 'undefined') {
-      const next = `#r=${encodeURIComponent(playable.roomCode)}`
+      const next = museumLocationHash(playable.roomCode)
       if (window.location.hash !== next) {
-        window.history.replaceState(null, '', next)
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${next}`)
       }
     }
   },

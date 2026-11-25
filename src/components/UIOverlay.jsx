@@ -176,7 +176,9 @@ export default function UIOverlay() {
       )
       const wentOffline = !!result?.offline
       setMpStatus({ ready: true, offline: wentOffline })
-      if (wentOffline) {
+      if (wentOffline && result?.reason === 'missing-game-id') {
+        setOfflineHint('Falta VITE_PLAYROOM_GAME_ID neste deploy. Cada visitante fica sozinho.')
+      } else if (wentOffline) {
         setOfflineHint('Sem conexão multiplayer — jogando sozinho.')
       }
       beginPlaying()

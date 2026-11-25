@@ -20,7 +20,7 @@ import {
   getState as roomGetState,
   onPlayerJoin,
 } from 'playroomkit'
-import { DEFAULT_VERSION_ID, getVersionById } from '../data/versions'
+import { DEFAULT_VERSION_ID, getVersionById, museumLocationHash } from '../data/versions'
 
 export const MAX_PLAYERS = 10
 export const POSE_INTERVAL_MS = 100
@@ -88,10 +88,24 @@ function withTimeout(promise, ms, label) {
   })
 }
 
+export function playroomGameId() {
+  const id = import.meta.env.VITE_PLAYROOM_GAME_ID
+  return typeof id === 'string' ? id.trim() : ''
+}
+
+/** O hash `r` precisa ser `R` + sala antes do insertCoin, senão o SDK corta a primeira letra. */
+export function alignPlayroomRoomHash(roomCode) {
+  if (typeof window === 'undefined') return
+  const next = museumLocationHash(roomCode)
+  const url = `${window.location.pathname}${window.location.search}${next}`
+  if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== url) {
+    window.history.replaceState(null, '', url)
+  }
+}
+
 function reloadForRoom(code) {
   if (typeof window === 'undefined') return new Promise(() => {})
-  const next = `#r=${encodeURIComponent(code)}`
-  window.location.hash = next
+  alignPlayroomRoomHash(code)
   window.location.reload()
   return new Promise(() => {})
 }
@@ -142,12 +156,14 @@ export async function connectMultiplayer(identity, roomCode) {
     }
   }
 
+  alignPlayroomRoomHash(code)
+
   const opts = {
     skipLobby: true,
     roomCode: code,
     maxPlayersPerRoom: MAX_PLAYERS,
   }
-  const gameId = import.meta.env.VITE_PLAYROOM_GAME_ID
+  const gameId = playroomGameId()
   if (gameId) {
     opts.gameId = gameId
   } else if (!hasWarnedMissingGameId && typeof console !== 'undefined') {
@@ -183,13 +199,13 @@ Documentação: ${PLAYROOM_DOCS_URL}`,
     insertCoinPossiblyPending = false
     activeRoomCode = code
     publishIdentity(identity)
-    if (typeof window !== 'undefined') {
-      const next = `#r=${encodeURIComponent(code)}`
-      if (window.location.hash !== next) {
-        window.history.replaceState(null, '', next)
-      }
+    alignPlayroomRoomHash(code)
+    return {
+      ok: true,
+      offline: false,
+      roomCode: code,
+      reason: gameId ? null : 'missing-game-id',
     }
-    return { ok: true, offline: false, roomCode: code }
   } catch (err) {
     // Modo offline silencioso com melhor diagnóstico
     if (typeof console !== 'undefined' && !hasWarnedMissingGameId) {
@@ -234,7 +250,13 @@ Documentação: ${PLAYROOM_DOCS_URL}`,
       insertCoinPossiblyPending = false
       sessionBooted = false
     }
-    return { ok: false, offline: true, error: err, roomCode: code }
+    return {
+      ok: false,
+      offline: true,
+      error: err,
+      roomCode: code,
+      reason: gameId ? 'connection-failed' : 'missing-game-id',
+    }
   } finally {
     bootPromise = null
   }
