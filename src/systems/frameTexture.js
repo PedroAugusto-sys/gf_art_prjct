@@ -41,24 +41,39 @@ export function textureRequest(url) {
   return { src, crossOrigin: remote ? 'anonymous' : null }
 }
 
-/** object-fit: cover. A imagem preenche o quadro sem esticar. */
-export function coverPlacement(imageWidth, imageHeight, frameWidth, frameHeight) {
-  const imageAspect = Math.max(1, imageWidth) / Math.max(1, imageHeight)
-  const frameAspect = Math.max(0.001, frameWidth) / Math.max(0.001, frameHeight)
+const MAT_COLOR = '#2a2a2a'
+
+/**
+ * object-fit: contain. A imagem inteira cabe no quadro, com passe-partout
+ * nas sobras. Nada é cortado e nada é esticado.
+ */
+export function containRect(imageWidth, imageHeight, frameWidth, frameHeight) {
+  const iw = Math.max(1, imageWidth)
+  const ih = Math.max(1, imageHeight)
+  const fw = Math.max(0.001, frameWidth)
+  const fh = Math.max(0.001, frameHeight)
+  const imageAspect = iw / ih
+  const frameAspect = fw / fh
   if (imageAspect > frameAspect) {
-    const repeatX = frameAspect / imageAspect
-    return { repeatX, repeatY: 1, offsetX: (1 - repeatX) / 2, offsetY: 0 }
+    const h = fw / imageAspect
+    return { x: 0, y: (fh - h) / 2, w: fw, h }
   }
-  const repeatY = imageAspect / frameAspect
-  return { repeatX: 1, repeatY, offsetX: 0, offsetY: (1 - repeatY) / 2 }
+  const w = fh * imageAspect
+  return { x: (fw - w) / 2, y: 0, w, h: fh }
 }
 
-export function applyCover(texture, imageWidth, imageHeight, frameWidth, frameHeight) {
-  const place = coverPlacement(imageWidth, imageHeight, frameWidth, frameHeight)
-  texture.wrapS = THREE.ClampToEdgeWrapping
-  texture.wrapT = THREE.ClampToEdgeWrapping
-  texture.repeat.set(place.repeatX, place.repeatY)
-  texture.offset.set(place.offsetX, place.offsetY)
+function paintContain(image, frameWidth, frameHeight) {
+  const canvas = document.createElement('canvas')
+  const pxW = 1024
+  const pxH = Math.max(1, Math.round(pxW * (frameHeight / Math.max(0.001, frameWidth))))
+  canvas.width = pxW
+  canvas.height = pxH
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = MAT_COLOR
+  ctx.fillRect(0, 0, pxW, pxH)
+  const rect = containRect(image.naturalWidth || image.width, image.naturalHeight || image.height, pxW, pxH)
+  ctx.drawImage(image, rect.x, rect.y, rect.w, rect.h)
+  const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   texture.anisotropy = 8
   texture.minFilter = THREE.LinearFilter
@@ -74,15 +89,7 @@ export function loadFrameTexture(url, frameWidth, frameHeight) {
     const img = new Image()
     if (request.crossOrigin) img.crossOrigin = request.crossOrigin
     img.onload = () => {
-      const texture = new THREE.Texture(img)
-      applyCover(
-        texture,
-        img.naturalWidth || img.width,
-        img.naturalHeight || img.height,
-        frameWidth,
-        frameHeight,
-      )
-      resolve(texture)
+      resolve(paintContain(img, frameWidth, frameHeight))
     }
     img.onerror = () => reject(new Error('texture'))
     img.src = request.src

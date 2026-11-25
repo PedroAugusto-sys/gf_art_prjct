@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
  * A imagem publicada chega no quadro como data URL, sem CORS,
- * e preenche a tela sem esticar.
+ * e cabe inteira no quadro, com passe-partout, sem esticar.
  */
 
 import assert from 'node:assert/strict'
 import {
   artworkImageSources,
-  coverPlacement,
+  containRect,
   isExampleArtwork,
   textureRequest,
 } from './src/systems/frameTexture.js'
@@ -44,15 +44,17 @@ test('data URL não pede CORS', () => {
   assert.equal(local.crossOrigin, null)
 })
 
-test('imagem larga é cortada nas laterais, não esticada', () => {
-  const wide = coverPlacement(800, 200, 2, 1.5)
-  assert.ok(wide.repeatX < 1)
-  assert.equal(wide.repeatY, 1)
-  assert.ok(wide.offsetX > 0)
-  const tall = coverPlacement(200, 800, 2, 1.5)
-  assert.equal(tall.repeatX, 1)
-  assert.ok(tall.repeatY < 1)
-  assert.ok(tall.offsetY > 0)
+test('imagem larga cabe inteira, com tarja em cima e embaixo', () => {
+  const wide = containRect(800, 200, 2, 1.5)
+  assert.equal(wide.w, 2)
+  assert.ok(wide.h < 1.5)
+  assert.ok(wide.y > 0)
+  assert.equal(wide.x, 0)
+  const tall = containRect(200, 800, 2, 1.5)
+  assert.equal(tall.h, 1.5)
+  assert.ok(tall.w < 2)
+  assert.ok(tall.x > 0)
+  assert.equal(tall.y, 0)
 })
 
 test('quadro de exemplo é publicável e obra de visitante não', () => {
