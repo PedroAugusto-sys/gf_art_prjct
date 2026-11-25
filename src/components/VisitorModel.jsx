@@ -8,10 +8,8 @@ import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { DEFAULT_APPEARANCE } from '../systems/appearance'
-import { gaitPose } from '../systems/gait'
+import { advanceGait, gaitPose } from '../systems/gait'
 import { CROWD_QUALITY } from '../systems/crowdQuality'
-
-const STEP_FREQ = 7.4
 
 const GEO = {
   head: new THREE.SphereGeometry(0.115, 16, 12),
@@ -74,8 +72,9 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
   const leftElbow = useRef(null)
   const rightElbow = useRef(null)
   const phase = useRef(Math.random() * Math.PI * 2)
-  const resting = useRef(false)
   const animTick = useRef(0)
+  const lastX = useRef(NaN)
+  const lastZ = useRef(NaN)
 
   useLayoutEffect(() => {
     const root = body.current
@@ -103,6 +102,19 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
     if (!body.current) return
     animTick.current += 1
     body.current.getWorldPosition(_lodPos)
+    let moved = 0
+    if (Number.isFinite(lastX.current)) {
+      moved = Math.hypot(_lodPos.x - lastX.current, _lodPos.z - lastZ.current)
+    }
+    lastX.current = _lodPos.x
+    lastZ.current = _lodPos.z
+
+    const walking = !!motion?.current?.walking
+    const viewing = !!motion?.current?.viewing
+    // A fase acompanha o chão em todo quadro. Longe, a pose é desenhada
+    // menos vezes, mas no ângulo certo — sem voltar ao repouso no meio.
+    phase.current = advanceGait(phase.current, { walking, moved, dt: delta })
+
     const cam = state.camera.position
     const dx = _lodPos.x - cam.x
     const dy = _lodPos.y - cam.y
@@ -112,29 +124,9 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
     const facingCam = dx * _lodDir.x + dy * _lodDir.y + dz * _lodDir.z
     const far = dist2 > CROWD_QUALITY.animDistance * CROWD_QUALITY.animDistance
     const behind = facingCam < -0.35 && dist2 > 9
-    if ((far || behind) && animTick.current % 6 !== 0) {
-      if (!resting.current) {
-        resting.current = true
-        const pose = gaitPose(0, false)
-        if (leftLeg.current) leftLeg.current.rotation.x = pose.leftLegX
-        if (rightLeg.current) rightLeg.current.rotation.x = pose.rightLegX
-        if (leftKnee.current) leftKnee.current.rotation.x = pose.leftKneeX
-        if (rightKnee.current) rightKnee.current.rotation.x = pose.rightKneeX
-        if (leftArm.current) leftArm.current.rotation.x = pose.leftArmX
-        if (rightArm.current) rightArm.current.rotation.x = pose.rightArmX
-        if (leftElbow.current) leftElbow.current.rotation.x = pose.leftElbowX
-        if (rightElbow.current) rightElbow.current.rotation.x = pose.rightElbowX
-      }
-      return
-    }
-    resting.current = false
+    if ((far || behind) && animTick.current % 6 !== 0) return
 
-    const dt = Math.min(delta, 0.05)
-    const walking = motion?.current?.walking
-    const viewing = motion?.current?.viewing
     const time = state.clock.elapsedTime
-
-    phase.current += dt * (walking ? STEP_FREQ : 1.6)
     const p = phase.current
     const bob = Math.abs(Math.sin(p)) * (walking ? 0.032 : 0.006)
     const pose = gaitPose(p, walking)
