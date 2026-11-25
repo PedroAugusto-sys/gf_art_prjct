@@ -1,10 +1,12 @@
 # 🌐 Configuração Multiplayer (Playroom Kit)
 
-## ✅ Modo Atual: Desenvolvimento (Funciona sem configuração)
+## Desenvolvimento
 
-O museu **já funciona em multiplayer** sem configuração adicional, mas com limite de DAU (Daily Active Users) imposto pelo Playroom Kit.
+Sem `VITE_PLAYROOM_GAME_ID`, o Playroom usa o projeto compartilhado de desenvolvimento. No `localhost` duas abas da mesma sala se veem, com limite de DAU.
 
-Se você abrir duas abas/navegadores na mesma URL, os usuários já se veem e sincronizam.
+Em produção (`art-prj.netlify.app`) esse modo não basta: o bundle atual não contém Game ID, e o hash `#r=gf-museu-v1` fazia o SDK entrar na sala `f-museu-v1` (ele descarta a primeira letra). Quem entrava pelo link e quem entrava pelo endereço limpo ficavam em salas diferentes.
+
+O código agora grava o hash como `r=R` + sala, e também aceita `?r=gf-museu-v1`. Ver os jogadores em produção ainda exige o Game ID no build. O servidor em `/server` não participa disso: a posição vai pelo WebSocket do Playroom (`wss://ws.joinplayroom.com`).
 
 ---
 

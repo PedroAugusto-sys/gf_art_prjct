@@ -19,7 +19,8 @@ function generateVisitor(id) {
     scale,
     height,
     entrySide,
-    spawn: [doorX + (Math.random() - 0.5) * 2.6, 0, 27 + Math.random() * 7],
+    // O vão tem 2,1 m. Nascer fora dele faz o corpo ir de encontro ao vidro.
+    spawn: [doorX + (Math.random() - 0.5) * 1.2, 0, 26 + Math.random() * 6],
   }
 }
 

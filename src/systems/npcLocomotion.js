@@ -22,9 +22,10 @@ export const WALK_SPEED = 1.2
 export const ARRIVE_RADIUS = 0.45
 export const ARRIVE_FINAL = 0.4
 
-const STUCK_INTERVAL = 1.2
-const STUCK_MIN_PROGRESS = 0.3
-const STUCK_MAX_RETRIES = 2
+const STUCK_INTERVAL = 0.8
+const STUCK_MIN_PROGRESS = 0.35
+const STUCK_MAX_RETRIES = 1
+const DOOR_HALF_CLEAR = DOORS.width * 0.5 - 0.28
 const VIEW_MIN = 8
 const VIEW_MAX = 15
 const REST_MIN = 3
@@ -76,8 +77,9 @@ export function buildWalkerRoute(state, position, targetX, targetZ, entrySide = 
   const doorX = entrySide < 0 ? DOOR_LEFT_X : DOOR_RIGHT_X
 
   if (outside) {
-    route.push({ x: doorX, z: HALF_D + 1.8 })
-    route.push({ x: doorX, z: HALF_D - 1.0 })
+    // Alinha no vão, ainda ao sul do vidro, e só então entra na sala.
+    route.push({ x: doorX, z: HALF_D + 2.6 })
+    route.push({ x: doorX, z: HALF_D - 1.6 })
   }
 
   const sx = outside ? doorX : position.x
@@ -159,15 +161,43 @@ function constrainMove(position, state) {
 
 /**
  * Um passo em direção ao waypoint. Não anda para trás e não entra em célula bloqueada.
+ * O eixo livre só vale se ainda aproxima o destino — senão o corpo escorrega na parede.
  */
 export function stepToward(x, z, dirX, dirZ, step, constrain) {
   if (step <= 1e-6) return { x, z, moved: false }
   const nx = x + dirX * step
   const nz = z + dirZ * step
   if (!constrain || isWalkable(nx, nz)) return { x: nx, z: nz, moved: true }
-  if (Math.abs(dirX) > 0.08 && isWalkable(nx, z)) return { x: nx, z, moved: true }
-  if (Math.abs(dirZ) > 0.08 && isWalkable(x, nz)) return { x, z: nz, moved: true }
+  const options = Math.abs(dirX) >= Math.abs(dirZ)
+    ? [[nx, z], [x, nz]]
+    : [[x, nz], [nx, z]]
+  for (let i = 0; i < options.length; i++) {
+    const px = options[i][0]
+    const pz = options[i][1]
+    if (constrain && !isWalkable(px, pz)) continue
+    const forward = (px - x) * dirX + (pz - z) * dirZ
+    if (forward > 0.0005) return { x: px, z: pz, moved: true }
+  }
+  // Um passo de lado, sem recuar, solta o corpo da quina do corredor.
+  const side = step * 0.85
+  const leftX = x - dirZ * side
+  const leftZ = z + dirX * side
+  const rightX = x + dirZ * side
+  const rightZ = z - dirX * side
+  if (!constrain || isWalkable(leftX, leftZ)) return { x: leftX, z: leftZ, moved: true }
+  if (!constrain || isWalkable(rightX, rightZ)) return { x: rightX, z: rightZ, moved: true }
   return { x, z, moved: false }
+}
+
+/** Puxa o corpo para dentro do vão antes da fachada. Fora da porta o vidro não é chão. */
+export function pullIntoDoor(x, z, doorX) {
+  if (z < HALF_D - 1.5 || z > HALF_D + 8) return x
+  const min = doorX - DOOR_HALF_CLEAR
+  const max = doorX + DOOR_HALF_CLEAR
+  if (x >= min && x <= max) return x
+  const target = x < min ? min : max
+  const urgency = z < HALF_D + 2.4 ? 1 : 0.4
+  return x + (target - x) * urgency
 }
 
 function pushApart(state, position, dirX, dirZ, constrain) {
@@ -250,7 +280,9 @@ export function tickWalker(state, position, dt, time, { npcId, leaving, entrySid
     let dist = Math.hypot(dx, dz)
     const radius = wp.final ? ARRIVE_FINAL : ARRIVE_RADIUS
 
-    if (dist < radius) {
+    if (constrainMove(position, state) && !wp.final && !isWalkable(wp.x, wp.z)) {
+      state.route.shift()
+    } else if (dist < radius) {
       state.route.shift()
       if (state.route.length === 0) {
         if (state.mode === 'leaving') {
@@ -277,6 +309,10 @@ export function tickWalker(state, position, dt, time, { npcId, leaving, entrySid
       const moved = stepToward(position.x, position.z, dirX, dirZ, Math.min(WALK_SPEED * stepDt, dist), constrain)
       position.x = moved.x
       position.z = moved.z
+      if (!insideGallery(position.z)) {
+        const doorX = entrySide < 0 ? DOOR_LEFT_X : DOOR_RIGHT_X
+        position.x = pullIntoDoor(position.x, position.z, doorX)
+      }
       moving = moved.moved
       blocked = !moved.moved
       if (moved.moved) pushApart(state, position, dirX, dirZ, constrainMove(position, state))

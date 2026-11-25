@@ -85,8 +85,10 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         title: artwork.title || 'Obra',
         artist: artwork.author || playerName || 'Visitante',
         year: '',
-        description: 'Obra publicada nesta sala.',
+        description: artwork.description || '',
         imagePath: artwork.dataUrl || artwork.url || '',
+        authorId: artwork.authorId || null,
+        frameId,
       }
     } else {
       mesh.userData.artwork = null
@@ -137,17 +139,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     return () => window.removeEventListener('keydown', handleKey)
   }, [showUploadUI])
 
-  const handleClick = () => {
-    if (artwork) {
-      const view = meshRef.current?.userData?.artwork
-      if (!view) return
-      unlockPointer()
-      useGameStore.getState().openArtwork(view)
-      return
-    }
-    handleInteract()
-  }
-
   return (
     <group position={position} rotation={rotation}>
       <mesh material={FRAME_MATERIAL} castShadow>
@@ -160,14 +151,12 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         onPointerOver={(e) => {
           e.stopPropagation()
           setHovered(true)
-          document.body.style.cursor = 'pointer'
         }}
         onPointerOut={(e) => {
           e.stopPropagation()
           setHovered(false)
-          document.body.style.cursor = 'auto'
         }}
-        onClick={handleClick}
+        onClick={(e) => e.stopPropagation()}
       >
         <planeGeometry args={[width, height]} />
         <meshStandardMaterial

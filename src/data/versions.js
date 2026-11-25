@@ -88,22 +88,64 @@ export function getVersionByRoomCode(code) {
   return null
 }
 
-/** Lê #r=CODE da URL atual. */
+/**
+ * O Playroom lê o hash `r` e descarta o primeiro caractere (o R que ele mesmo grava).
+ * Um link `#r=gf-museu-v1` entra na sala `f-museu-v1`, diferente de quem entrou
+ * sem hash e usou o roomCode inteiro. Por isso a sala conhecida vem de `m` ou
+ * de `?r=`, e o hash `r` só vale se for `R` + um código nosso.
+ */
+export function normalizeRoomCode(raw) {
+  if (!raw) return null
+  let code = String(raw).trim()
+  try {
+    code = decodeURIComponent(code)
+  } catch {
+    /* mantém o texto cru */
+  }
+  if (!code) return null
+  if (code.startsWith('R') && getVersionByRoomCode(code.slice(1))) return code.slice(1)
+  if (getVersionByRoomCode(code)) return code
+  return null
+}
+
+export function readRoomCodeFromLocation(loc = {}) {
+  const hash = loc.hash || ''
+  const search = loc.search || ''
+  const hashParams = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash)
+  const query = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+  const candidates = [hashParams.get('m'), query.get('m'), query.get('r'), hashParams.get('r')]
+  for (let i = 0; i < candidates.length; i++) {
+    const code = normalizeRoomCode(candidates[i])
+    if (code) return code
+  }
+  return null
+}
+
+/** Hash que o Playroom e o museu leem como a mesma sala. */
+export function museumLocationHash(roomCode) {
+  const params = new URLSearchParams()
+  params.set('m', roomCode)
+  params.set('r', `R${roomCode}`)
+  return `#${params.toString()}`
+}
+
+/** Lê a sala da URL. Aceita o hash antigo e também `?r=`. */
 export function parseRoomCodeFromHash(hash = typeof window !== 'undefined' ? window.location.hash : '') {
-  if (!hash) return null
-  const raw = hash.startsWith('#') ? hash.slice(1) : hash
-  const params = new URLSearchParams(raw.includes('=') ? raw : `r=${raw}`)
-  const code = params.get('r')
-  return code ? code.trim() : null
+  const search = typeof window !== 'undefined' && (hash === window.location.hash || hash === undefined)
+    ? window.location.search
+    : ''
+  return readRoomCodeFromLocation({ hash, search })
 }
 
 export function buildInviteUrl(roomCode) {
-  if (typeof window === 'undefined') return `/#r=${roomCode}`
-  return `${window.location.origin}/#r=${encodeURIComponent(roomCode)}`
+  const query = `?r=${encodeURIComponent(roomCode)}`
+  if (typeof window === 'undefined') return `/${query}`
+  return `${window.location.origin}/${query}`
 }
 
 export function versionFromUrl() {
-  const code = parseRoomCodeFromHash()
+  const loc = typeof window !== 'undefined' ? window.location : { hash: '', search: '' }
+  const code = readRoomCodeFromLocation(loc)
   let v = code ? getVersionByRoomCode(code) : null
   if (!v || v.status !== 'playable') v = getVersionById(DEFAULT_VERSION_ID)
   return v
