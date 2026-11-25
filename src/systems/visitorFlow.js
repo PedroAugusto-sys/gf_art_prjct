@@ -4,11 +4,21 @@
 
 import { create } from 'zustand'
 import { generateAppearance, randomVisitorName } from './appearance'
+import { crowdLimit } from './crowdQuality'
+import { nearestWalkable } from './navgrid'
+import { useGameStore } from '../store'
 
-function generateVisitor(id) {
+const INSIDE_SEEDS = [
+  [0, 0], [-6, 3], [6, -3], [-3, 9], [4, -9], [-8, -7],
+  [8, 7], [0, -11], [-10, 5], [10, -5], [2, 6], [-2, -5],
+  [5, 11], [-5, 12], [11, 2], [-11, -2],
+]
+
+function generateVisitor(id, index = 0) {
   const { appearance, outfit, scale, height } = generateAppearance()
-  const entrySide = Math.random() < 0.5 ? -1 : 1
+  const entrySide = index % 2 === 0 ? -1 : 1
   const doorX = entrySide < 0 ? -3.5 : 3.5
+  const lane = (index % 6) - 2.5
 
   return {
     id,
@@ -20,15 +30,29 @@ function generateVisitor(id) {
     height,
     entrySide,
     // O vão tem 2,1 m. Nascer fora dele faz o corpo ir de encontro ao vidro.
-    spawn: [doorX + (Math.random() - 0.5) * 1.2, 0, 26 + Math.random() * 6],
+    spawn: [doorX + lane * 0.28, 0, 24 + (index % 10) * 0.85],
   }
 }
 
-export const MAX_VISITORS = 5
-export const SPAWN_INTERVAL_MIN = 10
-export const SPAWN_INTERVAL_MAX = 18
-export const LIFESPAN_MIN = 60
-export const LIFESPAN_MAX = 120
+function indoorSpawn(index) {
+  const seed = INSIDE_SEEDS[index % INSIDE_SEEDS.length]
+  const spot = nearestWalkable(seed[0], seed[1])
+  return [spot.x, 0, spot.z]
+}
+
+export const MAX_VISITORS = 26
+export const SPAWN_INTERVAL_MIN = 2
+export const SPAWN_INTERVAL_MAX = 4.5
+export const LIFESPAN_MIN = 160
+export const LIFESPAN_MAX = 280
+
+function visitorCap() {
+  try {
+    return crowdLimit(!!useGameStore.getState().isMobile)
+  } catch {
+    return MAX_VISITORS
+  }
+}
 
 let uidCounter = 1
 
@@ -41,11 +65,14 @@ export const useVisitorStore = create((set, get) => ({
     const state = get()
     if (state._initialized) return
     const initial = []
-    for (let i = 0; i < 2; i++) {
-      const v = generateVisitor(`v-${uidCounter++}`)
+    const starters = Math.min(14, visitorCap())
+    for (let i = 0; i < starters; i++) {
+      const v = generateVisitor(`v-${uidCounter++}`, i)
       initial.push({
         ...v,
-        spawnedAt: now - Math.random() * (LIFESPAN_MIN * 0.6),
+        spawn: indoorSpawn(i),
+        entrySide: i % 2 === 0 ? -1 : 1,
+        spawnedAt: now - Math.random() * 20,
         lifespan: LIFESPAN_MIN + Math.random() * (LIFESPAN_MAX - LIFESPAN_MIN),
         leaving: false,
       })
@@ -99,8 +126,8 @@ export const useVisitorStore = create((set, get) => ({
     })
 
     const inside = updated.filter((v) => !v.leaving).length
-    if (now >= _nextSpawn && inside < MAX_VISITORS) {
-      const v = generateVisitor(`v-${uidCounter++}`)
+    if (now >= _nextSpawn && inside < visitorCap()) {
+      const v = generateVisitor(`v-${uidCounter++}`, inside)
       updated.push({
         ...v,
         spawnedAt: now,

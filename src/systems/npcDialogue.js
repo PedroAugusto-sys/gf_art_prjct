@@ -1,58 +1,77 @@
 /**
- * Frases positivas curtas que os NPCs dizem ao observar obras.
+ * Frases curtas que os visitantes dizem parados na frente de uma obra.
+ * Várias podem aparecer ao mesmo tempo, com um teto para não virar mural.
  */
 
 import artworksData from '../data/artworks.json' with { type: 'json' }
+import { CROWD_QUALITY } from './crowdQuality.js'
 
 const POSITIVE_LINES = [
-  'Que obra linda.',
+  'Que cores lindas!',
+  'Olha esse traço...',
+  'Que composição.',
   'Isso me acalmou.',
-  'Que cores incríveis.',
   'Adorei este detalhe.',
-  'Muito emocionante.',
-  'Que composição bela.',
   'Fiquei sem palavras.',
-  'Simplesmente maravilhoso.',
-  'Que luz especial.',
-  'Vale a visita.',
-  'Que talento!',
+  'Que luz nessa tela.',
+  'Me fez parar.',
+  'Bonito demais.',
+  'Olha a textura.',
+  'Queria ver de perto.',
+  'Que obra forte.',
   'Me fez pensar.',
+  'Vale a visita.',
 ]
 
-let lastGlobalSpeechAt = -999
-const GLOBAL_SPEECH_GAP = 8 // s entre falas de qualquer NPC na cena
+const activeUntil = []
 
-function getArtworkTitle(artId) {
+function communityTitle(artId) {
+  const store = typeof window !== 'undefined' ? window.useGameStore : null
+  if (!store) return null
+  const arts = store.getState().communityArtworks || []
+  const found = arts.find((art) => art && (art.id === artId || art.frameId === artId))
+  return found?.title || null
+}
+
+export function artworkTitle(artId) {
   if (!artId) return null
-  const artwork = artworksData.artworks?.find((art) => art.id === artId)
-  return artwork?.title || null
+  const fromJson = artworksData.artworks?.find((art) => art.id === artId)
+  if (fromJson?.title) return fromJson.title
+  return communityTitle(artId)
 }
 
 export function pickPositiveLine(artId) {
-  const title = getArtworkTitle(artId)
-  if (title) {
+  const title = artworkTitle(artId)
+  const clean = title ? String(title).replace(/\s*\(exemplo\)\s*$/i, '') : ''
+  if (clean) {
     const phrases = [
-      `"${title}" me tocou.`,
-      `Adorei "${title}".`,
-      `"${title}" é linda.`,
-      `Que obra especial.`,
+      `Que cores em "${clean}"!`,
+      `Olha o traço de "${clean}".`,
+      `"${clean}" me parou.`,
+      `Adorei "${clean}".`,
     ]
     return phrases[Math.floor(Math.random() * phrases.length)]
   }
   return POSITIVE_LINES[Math.floor(Math.random() * POSITIVE_LINES.length)]
 }
 
-/** Pode algum NPC falar agora? (no máximo 1 fala ativa na cena) */
+/** Cabe mais um balão agora? */
 export function canStartSpeech(now) {
-  return now - lastGlobalSpeechAt >= GLOBAL_SPEECH_GAP
+  while (activeUntil.length && activeUntil[0] <= now) activeUntil.shift()
+  return activeUntil.length < CROWD_QUALITY.maxSpeeches
 }
 
-export function markSpeechStarted(now) {
-  lastGlobalSpeechAt = now
+export function markSpeechStarted(now, duration = SPEECH_DURATION) {
+  activeUntil.push(now + duration)
+  activeUntil.sort((a, b) => a - b)
 }
 
-export const SPEECH_DURATION = 4.5
-export const SPEECH_COOLDOWN = 12
-export const SPEECH_CHANCE = 0.4
-export const SPEECH_DELAY_MIN = 1.5
-export const SPEECH_DELAY_MAX = 3
+export function resetSpeechLimiter() {
+  activeUntil.length = 0
+}
+
+export const SPEECH_DURATION = 4.2
+export const SPEECH_COOLDOWN = 10
+export const SPEECH_CHANCE = 0.92
+export const SPEECH_DELAY_MIN = 0.6
+export const SPEECH_DELAY_MAX = 1.6

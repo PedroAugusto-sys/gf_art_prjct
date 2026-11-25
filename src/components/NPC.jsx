@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { getState as roomGetState } from 'playroomkit'
 
 import {
   claimViewingSpot,
@@ -13,7 +12,9 @@ import {
 import { findPath, isWalkable, nearestWalkable } from '../systems/navgrid'
 import { createWalker, tickWalker } from '../systems/npcLocomotion'
 import { useVisitorStore } from '../systems/visitorFlow'
-import { npcPosMap } from '../systems/proximityRefs'
+import { npcPosMap, playerPosRef } from '../systems/proximityRefs'
+import { segmentIndoors } from '../systems/roomClearance'
+import { CROWD_QUALITY } from '../systems/crowdQuality'
 import { sim, advanceSim } from '../systems/simClock'
 import { NPC_OBSTACLES, WALK_BOUNDS, HALF_D, DOORS } from '../data/museumLayout'
 import {
@@ -26,14 +27,6 @@ import {
   SPEECH_DELAY_MIN,
   SPEECH_DELAY_MAX,
 } from '../systems/npcDialogue'
-import {
-  isRoomHost,
-  isMultiplayerOffline,
-  isMultiplayerConnected,
-  publishNpcs,
-  NPC_SNAPSHOT_MS,
-} from '../systems/multiplayer'
-import { updateNpcSnapshot, removeNpcSnapshot, buildNpcSnapshot } from '../systems/npcSnapshot'
 import VisitorModel, { BlobShadow } from './VisitorModel'
 import { DEFAULT_APPEARANCE } from '../systems/appearance'
 import { useGameStore } from '../store'
@@ -100,10 +93,13 @@ function shortestAngle(from, to) {
  * ponto exato elimina esse estado morto e faz o visitante parar de fato na
  * frente da obra, e nao no waypoint do corredor.
  */
-function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedExit) {
+function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedExit, slot) {
   const brain = useRef(createWalker(entrySide))
   const yaw = useRef(0) // Modelo aponta para +Z quando yaw=0
   const separation = useRef({ x: 0, z: 0 })
+  const aiFrame = useRef(slot || 0)
+  const aiTime = useRef(0)
+  const simStamp = useRef(-1)
 
   useEffect(() => () => removeAgent(npcId), [npcId])
 
@@ -201,7 +197,19 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
     const group = groupRef.current
     if (!group) return
 
-    const dt = Math.min(delta, 0.05)
+    // O relógio da simulação é a mesma fonte do detector de preso.
+    // Somar o delta cru do frame (e ainda cortar em 0,1) fazia o corpo
+    // andar menos do que o tempo pedia quando o quadro caía.
+    const now = sim.time
+    if (simStamp.current < 0) simStamp.current = now
+    const elapsed = Math.max(0, now - simStamp.current)
+    simStamp.current = now
+    aiTime.current += elapsed
+    aiFrame.current += 1
+    if (!isLegacyNpcs() && aiFrame.current % CROWD_QUALITY.aiStride !== 0) return
+
+    const dt = Math.min(isLegacyNpcs() ? delta : aiTime.current, 0.25)
+    aiTime.current = 0
     const time = sim.time // relogio monotonico: imune a troca de aba
     const position = group.position
     const state = brain.current
@@ -216,27 +224,6 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
         const desired = Math.atan2(result.faceX, result.faceZ)
         yaw.current += shortestAngle(yaw.current, desired) * Math.min(1, TURN_SPEED * dt)
         group.rotation.y = yaw.current
-      }
-      if (
-        state.mode === 'viewing' &&
-        state.speechArmedAt > 0 &&
-        time >= state.speechArmedAt
-      ) {
-        state.speechArmedAt = 0
-        if (
-          time >= state.speechCooldownUntil &&
-          !state.speechText &&
-          canStartSpeech(time) &&
-          Math.random() < SPEECH_CHANCE
-        ) {
-          state.speechText = pickPositiveLine(state.lastArtId)
-          state.speechUntil = time + SPEECH_DURATION
-          markSpeechStarted(time)
-        }
-      }
-      if (state.speechText && time >= state.speechUntil) {
-        state.speechText = null
-        state.speechCooldownUntil = time + SPEECH_COOLDOWN
       }
       motion.current.walking = result.moving
       motion.current.viewing = state.mode === 'viewing'
@@ -499,16 +486,36 @@ function useVisitorBrain(groupRef, npcId, entrySide, leaving, motion, onReachedE
   })
 }
 
-// ---------- Componente de um visitante (host / offline) ----------
+function slotOf(id) {
+  let hash = 0
+  const text = String(id)
+  for (let i = 0; i < text.length; i++) hash = (hash + text.charCodeAt(i) * (i + 1)) % 97
+  return hash
+}
+
+function labelsNear(position, speech, personName) {
+  const [px, , pz] = playerPosRef.current
+  const dist = Math.hypot(position.x - px, position.z - pz)
+  if (dist > CROWD_QUALITY.nameRange) return { name: null, speech: null }
+  if (!segmentIndoors(px, pz, position.x, position.z)) return { name: null, speech: null }
+  return {
+    name: personName,
+    speech: speech && dist <= CROWD_QUALITY.speechRange ? speech : null,
+  }
+}
+
+// ---------- Um visitante simulado neste cliente ----------
 function HostVisitorNPC({ id, name, appearance, outfit, scale, entrySide, leaving, spawn }) {
   const despawn = useVisitorStore((s) => s.despawn)
   const group = useRef(null)
   const motion = useRef({ walking: true, viewing: false, speech: null, yaw: Math.PI })
   const [bubble, setBubble] = useState(null)
+  const [showName, setShowName] = useState(false)
   const lastBubble = useRef(null)
+  const lastName = useRef(false)
   const frameN = useRef(0)
 
-  useVisitorBrain(group, id, entrySide, leaving, motion, () => despawn(id))
+  useVisitorBrain(group, id, entrySide, leaving, motion, () => despawn(id), slotOf(id))
 
   useFrame(() => {
     const g = group.current
@@ -521,33 +528,22 @@ function HostVisitorNPC({ id, name, appearance, outfit, scale, entrySide, leavin
     entry[0] = g.position.x
     entry[1] = g.position.z
 
-    const sp = motion.current.speech || null
     frameN.current++
-    if (frameN.current % 10 === 0 && sp !== lastBubble.current) {
-      lastBubble.current = sp
-      setBubble(sp)
+    if (frameN.current % 8 !== 0) return
+    const visible = labelsNear(g.position, motion.current.speech || null, name)
+    if (visible.speech !== lastBubble.current) {
+      lastBubble.current = visible.speech
+      setBubble(visible.speech)
     }
-
-    updateNpcSnapshot(id, {
-      id,
-      name,
-      appearance,
-      outfit,
-      scale,
-      x: g.position.x,
-      z: g.position.z,
-      yaw: motion.current.yaw ?? g.rotation.y,
-      walking: !!motion.current.walking,
-      viewing: !!motion.current.viewing,
-      speech: sp,
-    })
+    const named = !!visible.name && !isLegacyNpcs()
+    if (named !== lastName.current) {
+      lastName.current = named
+      setShowName(named)
+    }
   })
 
-  useEffect(() => {
-    return () => {
-      npcPosMap.delete(id)
-      removeNpcSnapshot(id)
-    }
+  useEffect(() => () => {
+    npcPosMap.delete(id)
   }, [id])
 
   return (
@@ -558,7 +554,7 @@ function HostVisitorNPC({ id, name, appearance, outfit, scale, entrySide, leavin
           appearance={appearance || DEFAULT_APPEARANCE_FALLBACK}
           outfit={outfit}
           motion={motion}
-          name={isLegacyNpcs() ? null : name}
+          name={showName ? name : null}
           speech={isLegacyNpcs() ? null : bubble}
         />
       </group>
@@ -566,141 +562,25 @@ function HostVisitorNPC({ id, name, appearance, outfit, scale, entrySide, leavin
   )
 }
 
-/** NPC interpolado a partir do snapshot do host (clientes). */
-function RemoteVisitorNPC({ data }) {
-  const group = useRef(null)
-  const motion = useRef({ walking: false, viewing: false })
-  const target = useRef({ x: data.x || 0, z: data.z || 0, yaw: data.yaw || 0 })
-
-  useEffect(() => {
-    target.current = { x: data.x || 0, z: data.z || 0, yaw: data.yaw || 0 }
-    motion.current.walking = !!data.walking
-    motion.current.viewing = !!data.viewing
-  }, [data])
-
-  useFrame((_, delta) => {
-    const g = group.current
-    if (!g) return
-    const dt = Math.min(delta, 0.05)
-    const t = target.current
-    g.position.x += (t.x - g.position.x) * Math.min(1, 8 * dt)
-    g.position.z += (t.z - g.position.z) * Math.min(1, 8 * dt)
-    let dy = t.yaw - g.rotation.y
-    while (dy > Math.PI) dy -= Math.PI * 2
-    while (dy < -Math.PI) dy += Math.PI * 2
-    g.rotation.y += dy * Math.min(1, 8 * dt)
-
-    let entry = npcPosMap.get(data.id)
-    if (!entry) {
-      entry = [0, 0]
-      npcPosMap.set(data.id, entry)
-    }
-    entry[0] = g.position.x
-    entry[1] = g.position.z
-  })
-
-  useEffect(() => () => npcPosMap.delete(data.id), [data.id])
-
-  const scale = data.scale || [1, 1, 1]
-
-  return (
-    <>
-      <BlobShadow target={group} />
-      <group ref={group} position={[data.x || 0, 0, data.z || 0]} scale={scale}>
-        <VisitorModel
-          appearance={data.appearance || DEFAULT_APPEARANCE_FALLBACK}
-          outfit={data.outfit || 'shirt'}
-          motion={motion}
-          name={data.name}
-          speech={data.speech || null}
-        />
-      </group>
-    </>
-  )
-}
-
 /**
- * Ticker: avanca relogio; host inicia spawn e publica snapshot.
+ * Cada cliente simula a própria multidão. Nada disso entra no Playroom:
+ * o estado da sala continua sendo só pose dos jogadores e obras.
  */
 export function VisitorFlowTicker() {
   const tick = useVisitorStore((s) => s.tick)
   const init = useVisitorStore((s) => s.init)
-  const hydrateFromSnapshot = useVisitorStore((s) => s.hydrateFromSnapshot)
-  const lastPub = useRef(0)
-  const wasHost = useRef(null)
-  const remoteCache = useRef([])
 
   useFrame((_, delta) => {
     const t = advanceSim(delta)
-    const host = isRoomHost() || isMultiplayerOffline()
-
-    if (isMultiplayerConnected()) {
-      try {
-        const snap = roomGetState('npcs')
-        if (Array.isArray(snap)) remoteCache.current = snap
-      } catch {
-        /* ainda nao conectado */
-      }
-    }
-
-    if (wasHost.current === null) {
-      wasHost.current = host
-      if (host) init(t)
-      else if (remoteCache.current.length) hydrateFromSnapshot(remoteCache.current, t)
-    } else if (!wasHost.current && host) {
-      hydrateFromSnapshot(remoteCache.current, t)
-      wasHost.current = true
-    } else if (wasHost.current && !host) {
-      wasHost.current = false
-    }
-
-    if (host) {
-      if (!useVisitorStore.getState()._initialized) init(t)
-      tick(t)
-      const nowMs = performance.now()
-      if (nowMs - lastPub.current >= NPC_SNAPSHOT_MS) {
-        lastPub.current = nowMs
-        publishNpcs(buildNpcSnapshot())
-      }
-    }
+    if (!useVisitorStore.getState()._initialized) init(t)
+    tick(t)
   })
 
   return null
 }
 
-/**
- * Renderiza NPCs: host simula; clientes leem snapshot Playroom.
- */
 export default function VisitorLayer() {
   const visitors = useVisitorStore((s) => s.visitors)
-  const [remoteNpcs, setRemoteNpcs] = useState([])
-  const [host, setHost] = useState(() => isRoomHost() || isMultiplayerOffline())
-  const poll = useRef(0)
-
-  useFrame(() => {
-    poll.current++
-    if (poll.current % 12 !== 0) return
-    const nowHost = isRoomHost() || isMultiplayerOffline()
-    if (nowHost !== host) setHost(nowHost)
-    if (!nowHost && isMultiplayerConnected()) {
-      try {
-        const snap = roomGetState('npcs')
-        if (Array.isArray(snap)) setRemoteNpcs(snap)
-      } catch {
-        /* ignore */
-      }
-    }
-  })
-
-  if (!host) {
-    return (
-      <>
-        {remoteNpcs.map((n) => (
-          <RemoteVisitorNPC key={n.id} data={n} />
-        ))}
-      </>
-    )
-  }
 
   return (
     <>

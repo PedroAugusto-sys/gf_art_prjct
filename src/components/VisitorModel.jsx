@@ -3,12 +3,13 @@
  * Usado por NPCs locais, NPCs remotos (snapshot) e jogadores remotos.
  */
 
-import { useMemo, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { DEFAULT_APPEARANCE } from '../systems/appearance'
 import { gaitPose } from '../systems/gait'
+import { CROWD_QUALITY } from '../systems/crowdQuality'
 
 const STEP_FREQ = 7.4
 
@@ -48,6 +49,8 @@ const blobMat = new THREE.MeshBasicMaterial({
 })
 
 const _blobWorldPos = new THREE.Vector3()
+const _lodPos = new THREE.Vector3()
+const _lodDir = new THREE.Vector3()
 
 export function BlobShadow({ target }) {
   const meshRef = useRef(null)
@@ -71,6 +74,18 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
   const leftElbow = useRef(null)
   const rightElbow = useRef(null)
   const phase = useRef(Math.random() * Math.PI * 2)
+  const resting = useRef(false)
+  const animTick = useRef(0)
+
+  useLayoutEffect(() => {
+    const root = body.current
+    if (!root) return
+    root.traverse((obj) => {
+      obj.castShadow = false
+      obj.receiveShadow = false
+      obj.frustumCulled = true
+    })
+  }, [appearance, outfit, hideHead])
 
   const mats = useMemo(
     () => ({
@@ -85,6 +100,35 @@ function VisitorBody({ appearance = DEFAULT_APPEARANCE, outfit = 'shirt', motion
   )
 
   useFrame((state, delta) => {
+    if (!body.current) return
+    animTick.current += 1
+    body.current.getWorldPosition(_lodPos)
+    const cam = state.camera.position
+    const dx = _lodPos.x - cam.x
+    const dy = _lodPos.y - cam.y
+    const dz = _lodPos.z - cam.z
+    const dist2 = dx * dx + dy * dy + dz * dz
+    state.camera.getWorldDirection(_lodDir)
+    const facingCam = dx * _lodDir.x + dy * _lodDir.y + dz * _lodDir.z
+    const far = dist2 > CROWD_QUALITY.animDistance * CROWD_QUALITY.animDistance
+    const behind = facingCam < -0.35 && dist2 > 9
+    if ((far || behind) && animTick.current % 6 !== 0) {
+      if (!resting.current) {
+        resting.current = true
+        const pose = gaitPose(0, false)
+        if (leftLeg.current) leftLeg.current.rotation.x = pose.leftLegX
+        if (rightLeg.current) rightLeg.current.rotation.x = pose.rightLegX
+        if (leftKnee.current) leftKnee.current.rotation.x = pose.leftKneeX
+        if (rightKnee.current) rightKnee.current.rotation.x = pose.rightKneeX
+        if (leftArm.current) leftArm.current.rotation.x = pose.leftArmX
+        if (rightArm.current) rightArm.current.rotation.x = pose.rightArmX
+        if (leftElbow.current) leftElbow.current.rotation.x = pose.leftElbowX
+        if (rightElbow.current) rightElbow.current.rotation.x = pose.rightElbowX
+      }
+      return
+    }
+    resting.current = false
+
     const dt = Math.min(delta, 0.05)
     const walking = motion?.current?.walking
     const viewing = motion?.current?.viewing

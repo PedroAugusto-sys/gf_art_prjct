@@ -61,7 +61,7 @@ export default function App() {
           <VisitorFlowTicker />
 
           <Physics gravity={[0, -9.81, 0]}>
-            <Player position={[0, 2, 12]} />
+            <Player position={[0, 2, 8]} />
             {prototype ? <PrototypeEnvironment /> : <MuseumEnvironment />}
 
             {artworks.map((art) => (

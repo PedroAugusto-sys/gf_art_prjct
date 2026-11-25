@@ -87,7 +87,7 @@ export default function MuseumEnvironment() {
   const potGeo = useMemo(() => new THREE.CylinderGeometry(0.3, 0.22, 0.5, 10), [])
   const potPlantGeo = useMemo(() => new THREE.IcosahedronGeometry(0.34, 1), [])
 
-  const shadowMapSize = isMobile ? 1024 : 2048
+  const shadowMapSize = 1024
 
   return (
     <group>
