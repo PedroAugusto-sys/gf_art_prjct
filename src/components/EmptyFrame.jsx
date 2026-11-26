@@ -131,20 +131,20 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
                   <button
                     onClick={async (e) => {
                       e.stopPropagation()
-                      if (confirm(`Deletar "${artwork.title}"?`)) {
-                        try {
-                          await deleteArtwork(artwork.id)
-                          // Remove do store local
-                          updateCommunityArtwork(artwork.id, null)
-                          // Atualiza Playroom
-                          publishGalleryState({
-                            annexCount: useGameStore.getState().annexCount,
-                            artworks: communityArtworks.filter(a => a.id !== artwork.id)
-                          })
-                        } catch (err) {
+                      if (!confirm(`Deletar "${artwork.title}"?`)) return
+                      try {
+                        if (sessionToken) await deleteArtwork(artwork.id)
+                      } catch (err) {
+                        if (sessionToken) {
                           alert(`Erro: ${err.message}`)
+                          return
                         }
                       }
+                      updateCommunityArtwork(artwork.id, null)
+                      publishGalleryState({
+                        annexCount: useGameStore.getState().annexCount,
+                        artworks: useGameStore.getState().communityArtworks.filter((item) => item.id !== artwork.id),
+                      })
                     }}
                     style={{
                       padding: '4px 8px',

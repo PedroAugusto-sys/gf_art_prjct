@@ -153,7 +153,7 @@ export async function publishImageOnFrame({ file, frameId, title, description, e
     authorId,
     authorToken: sessionToken || existing?.authorToken || undefined,
     timestamp: Date.now(),
-    isTemporary: !!uploaded || !!existing?.isTemporary,
+    isTemporary: true,
   }
 
   rememberLocally(artwork)
