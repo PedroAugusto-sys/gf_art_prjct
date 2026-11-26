@@ -97,3 +97,13 @@ export function staleImageKeys(previousMeta, nextMeta) {
 export function galleryHasInlineImages(meta) {
   return (meta?.artworks || []).some((art) => typeof art?.dataUrl === 'string' && art.dataUrl.startsWith('data:'))
 }
+
+/** Sala vazia: o anfitrião sozinho descarta o que a sala antiga ainda guardava. */
+export function shouldDiscardSessionArtworks({ isHost, others }) {
+  return !!isHost && (Number(others) || 0) === 0
+}
+
+export function withoutBuriedArtworks(artworks, buried) {
+  if (!buried || buried.size === 0) return artworks || []
+  return (artworks || []).filter((art) => !art?.id || !buried.has(art.id))
+}

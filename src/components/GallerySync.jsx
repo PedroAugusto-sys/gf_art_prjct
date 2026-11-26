@@ -2,14 +2,17 @@ import { useEffect, useRef } from 'react'
 import { onPlayerJoin } from 'playroomkit'
 import { useGameStore } from '../store'
 import {
+  discardStaleSessionArtworksIfAlone,
   getInitialGalleryState,
   isMultiplayerConnected,
   isRoomHost,
   publishGalleryState,
   readGalleryMeta,
+  withoutStaleArtworks,
 } from '../systems/multiplayer'
 import { galleryHasInlineImages } from '../systems/galleryPayload'
 import { mergeAnnexCount } from '../systems/galleryExpansion'
+import { scrubLocalArtworkCache } from '../systems/publishFrame'
 
 function withLocalImages(local, remote) {
   return remote.map((art) => {
@@ -62,51 +65,79 @@ export function GallerySync() {
         if (merged !== state.annexCount) setAnnexCount(merged)
       }
       if (Array.isArray(gallery.artworks)) {
-        const mergedArt = withLocalImages(state.communityArtworks, gallery.artworks)
+        const visible = withoutStaleArtworks(gallery.artworks)
+        const mergedArt = withLocalImages(state.communityArtworks, visible)
         if (!sameArtworks(state.communityArtworks, mergedArt)) setCommunityArtworks(mergedArt)
       }
     }
 
     const publishHeld = () => {
       const state = useGameStore.getState()
-      const held = (state.communityArtworks || []).some((art) => typeof art?.dataUrl === 'string' && art.dataUrl.startsWith('data:'))
+      const artworks = withoutStaleArtworks(state.communityArtworks)
+      const held = artworks.some((art) => typeof art?.dataUrl === 'string' && art.dataUrl.startsWith('data:'))
       if (!held) return
       publishGalleryState({
         annexCount: state.annexCount,
-        artworks: state.communityArtworks,
+        artworks,
       })
     }
 
-    apply(getInitialGalleryState())
-
-    const raw = readGalleryMeta()
-    if (!repacked.current && galleryHasInlineImages(raw)) {
-      repacked.current = true
-      publishHeld()
-    }
-
-    const id = setInterval(() => {
-      try {
-        apply(getInitialGalleryState())
-      } catch {
-        // Modo offline ou estado ainda indisponível.
-      }
-    }, POLL_MS)
-
+    let intervalId = 0
     let unsubscribe = () => {}
-    try {
-      const joined = onPlayerJoin(() => {
-        if (stopped || !isRoomHost()) return
+    let emptied = false
+    let discardMark = 0
+
+    const begin = async () => {
+      scrubLocalArtworkCache()
+      const discarded = await discardStaleSessionArtworksIfAlone()
+      if (stopped) return
+      if (discarded) {
+        emptied = true
+        discardMark = Date.now()
+        setCommunityArtworks([])
+      } else {
+        apply(getInitialGalleryState())
+      }
+
+      const raw = readGalleryMeta()
+      if (!discarded && !repacked.current && galleryHasInlineImages(raw)) {
+        repacked.current = true
         publishHeld()
-      })
-      if (typeof joined === 'function') unsubscribe = joined
-    } catch {
-      /* a sala segue pelo estado, sem o aviso de entrada */
+      }
+
+      intervalId = setInterval(() => {
+        try {
+          if (emptied && Date.now() - discardMark < 4000) {
+            const state = useGameStore.getState()
+            const publishedAfter = (state.communityArtworks || []).some((art) => art?.timestamp > discardMark)
+            if (!publishedAfter) {
+              publishGalleryState({ annexCount: state.annexCount, artworks: [] })
+              if (state.communityArtworks.length) setCommunityArtworks([])
+              return
+            }
+          }
+          apply(getInitialGalleryState())
+        } catch {
+          // Modo offline ou estado ainda indisponível.
+        }
+      }, POLL_MS)
+
+      try {
+        const joined = onPlayerJoin(() => {
+          if (stopped || !isRoomHost()) return
+          publishHeld()
+        })
+        if (typeof joined === 'function') unsubscribe = joined
+      } catch {
+        /* a sala segue pelo estado, sem o aviso de entrada */
+      }
     }
+
+    begin()
 
     return () => {
       stopped = true
-      clearInterval(id)
+      clearInterval(intervalId)
       try {
         unsubscribe()
       } catch {

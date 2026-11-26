@@ -102,14 +102,35 @@ export function canEditArtwork(artwork) {
   }
 }
 
+function artworkRecord(artwork) {
+  if (!artwork || typeof artwork !== 'object') return null
+  const { dataUrl, url, ...rest } = artwork
+  return rest
+}
+
+/** A cópia local só lembra de quem é a obra. Sem a imagem, um reentrar não republica. */
+export function scrubLocalArtworkCache() {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const backup = JSON.parse(localStorage.getItem('gf-my-artworks') || '[]')
+    if (!Array.isArray(backup)) return
+    const slim = backup.map(artworkRecord).filter(Boolean)
+    localStorage.setItem('gf-my-artworks', JSON.stringify(slim))
+  } catch {
+    // localStorage pode estar cheio ou bloqueado
+  }
+}
+
 function rememberLocally(artwork) {
   if (typeof localStorage === 'undefined') return
   try {
     const backup = JSON.parse(localStorage.getItem('gf-my-artworks') || '[]')
-    const existing = backup.findIndex((art) => art.frameId === artwork.frameId)
-    if (existing >= 0) backup[existing] = artwork
-    else backup.push(artwork)
-    localStorage.setItem('gf-my-artworks', JSON.stringify(backup))
+    const record = artworkRecord(artwork)
+    if (!record) return
+    const existing = backup.findIndex((art) => art.frameId === record.frameId)
+    if (existing >= 0) backup[existing] = record
+    else backup.push(record)
+    localStorage.setItem('gf-my-artworks', JSON.stringify(backup.map(artworkRecord).filter(Boolean)))
   } catch {
     // localStorage pode estar cheio ou bloqueado
   }

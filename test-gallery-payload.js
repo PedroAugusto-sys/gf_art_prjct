@@ -8,8 +8,10 @@ import {
   IMAGE_CHUNK,
   galleryHasInlineImages,
   packGallery,
+  shouldDiscardSessionArtworks,
   staleImageKeys,
   unpackGallery,
+  withoutBuriedArtworks,
 } from './src/systems/galleryPayload.js'
 import { uploadServerUrl } from './src/systems/uploadServer.js'
 
@@ -87,4 +89,22 @@ test('produção não usa localhost e sem variável não há servidor', () => {
   assert.equal(uploadServerUrl({ VITE_UPLOAD_SERVER_URL: 'https://uploads.example/' }), 'https://uploads.example')
 })
 
-console.log('todos os testes passaram')
+test('sala vazia apaga os pedaços da imagem', () => {
+  const prev = { artworks: [{ id: 'community-1', parts: 2 }] }
+  const next = packGallery({ annexCount: 1, artworks: [] })
+  assert.deepEqual(next.meta.artworks, [])
+  assert.equal(next.meta.annexCount, 1)
+  assert.deepEqual(staleImageKeys(prev, next.meta), ['ga:community-1:0', 'ga:community-1:1'])
+})
+
+test('só quem está sozinho descarta a sessão anterior', () => {
+  assert.equal(shouldDiscardSessionArtworks({ isHost: true, others: 0 }), true)
+  assert.equal(shouldDiscardSessionArtworks({ isHost: true, others: 1 }), false)
+  assert.equal(shouldDiscardSessionArtworks({ isHost: false, others: 0 }), false)
+  const buried = new Set(['velha'])
+  const kept = withoutBuriedArtworks(
+    [{ id: 'velha', title: 'Circulo vermelho' }, { id: 'nova', title: 'Agora' }],
+    buried,
+  )
+  assert.deepEqual(kept.map((art) => art.id), ['nova'])
+})

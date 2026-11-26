@@ -19,9 +19,10 @@ import {
   setState as roomSetState,
   getState as roomGetState,
   onPlayerJoin,
+  getParticipants,
 } from 'playroomkit'
 import { DEFAULT_VERSION_ID, getVersionById, museumLocationHash } from '../data/versions'
-import { packGallery, unpackGallery, staleImageKeys } from './galleryPayload.js'
+import { packGallery, unpackGallery, staleImageKeys, shouldDiscardSessionArtworks, withoutBuriedArtworks } from './galleryPayload.js'
 
 export const MAX_PLAYERS = 10
 export const POSE_INTERVAL_MS = 100
@@ -384,6 +385,62 @@ export function readSharedGallery() {
   const meta = readGalleryMeta()
   if (!meta) return null
   return unpackGallery(meta, readChunk)
+}
+
+const buriedArtworkIds = new Set()
+let staleSessionDecision = null
+let staleSessionSettled = false
+
+/** Outros jogadores já na sala. Lista vazia ou erro não conta como sala vazia. */
+export function otherPlayersPresent() {
+  try {
+    const all = getParticipants() || {}
+    const ids = Object.keys(all)
+    if (!ids.length) return 1
+    let mine = null
+    try {
+      mine = myPlayer()?.id
+    } catch {
+      mine = null
+    }
+    return ids.filter((id) => id && id !== mine).length
+  } catch {
+    return 1
+  }
+}
+
+export function withoutStaleArtworks(artworks) {
+  return withoutBuriedArtworks(artworks, buriedArtworkIds)
+}
+
+/**
+ * O Playroom guarda o estado da sala com código fixo mesmo depois que
+ * todo mundo saiu. Quem entra sozinho apaga as obras da sessão anterior.
+ * Quem entra com gente na sala não mexe. A decisão vale uma vez por carga;
+ * um retorno ao menu não apaga o que a pessoa publicou nesta visita.
+ */
+export function discardStaleSessionArtworksIfAlone() {
+  if (staleSessionSettled) return Promise.resolve(false)
+  if (!staleSessionDecision) {
+    staleSessionDecision = (async () => {
+      if (!connected || offline || !isRoomHost()) return false
+      if (!shouldDiscardSessionArtworks({ isHost: true, others: otherPlayersPresent() })) return false
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      if (!connected || offline || !isRoomHost()) return false
+      if (!shouldDiscardSessionArtworks({ isHost: true, others: otherPlayersPresent() })) return false
+      const meta = readGalleryMeta()
+      for (const art of meta?.artworks || []) {
+        if (art?.id) buriedArtworkIds.add(art.id)
+      }
+      const annexCount = typeof meta?.annexCount === 'number' ? meta.annexCount : 0
+      publishGalleryState({ annexCount, artworks: [] })
+      return true
+    })()
+    staleSessionDecision.finally(() => {
+      staleSessionSettled = true
+    })
+  }
+  return staleSessionDecision
 }
 
 export function publishGalleryState(gallery) {
