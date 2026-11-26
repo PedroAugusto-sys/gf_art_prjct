@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import ArtworkTitlePlate from './ArtworkTitlePlate'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { registerArtwork } from '../systems/artworkTargets'
@@ -105,6 +106,13 @@ export default function ArtworkFrame({ artwork }) {
           <meshBasicMaterial color="#1f1f1f" />
         </mesh>
       )}
+      <ArtworkTitlePlate
+        meshRef={meshRef}
+        width={width}
+        height={height}
+        title={published?.title || title}
+        author={published?.author || artwork.artist}
+      />
       <group name={`artwork-${title}`} />
 
     </group>

@@ -21,6 +21,7 @@ import {
   onPlayerJoin,
 } from 'playroomkit'
 import { DEFAULT_VERSION_ID, getVersionById, museumLocationHash } from '../data/versions'
+import { packGallery, unpackGallery, staleImageKeys } from './galleryPayload.js'
 
 export const MAX_PLAYERS = 10
 export const POSE_INTERVAL_MS = 100
@@ -43,6 +44,33 @@ let activeRoomCode = null
 let insertCoinPossiblyPending = false
 /** Promise em voo do boot atual (evita double-call enquanto waiting). */
 let bootPromise = null
+let playroomGuardInstalled = false
+
+function playroomEmitterNoise(message, stack) {
+  const msg = String(message || '')
+  if (!msg.includes('Unhandled error')) return false
+  const frame = String(stack || '')
+  return frame.includes('WebSocket') || frame.includes('.emit') || msg.includes('undefined')
+}
+
+/** O SDK joga "Unhandled error. (undefined)" quando o socket recusa um estado. Não deixa isso encher o console. */
+function installPlayroomErrorGuard() {
+  if (playroomGuardInstalled || typeof window === 'undefined') return
+  playroomGuardInstalled = true
+  window.addEventListener('error', (event) => {
+    if (!playroomEmitterNoise(event.message, event.error?.stack)) return
+    event.preventDefault()
+  })
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason
+    const msg = reason && typeof reason === 'object' ? reason.message : reason
+    const stack = reason && typeof reason === 'object' ? reason.stack : ''
+    if (!playroomEmitterNoise(msg, stack)) return
+    event.preventDefault()
+  })
+}
+
+installPlayroomErrorGuard()
 
 export function isMultiplayerConnected() {
   return connected && !offline
@@ -303,10 +331,53 @@ export function publishNpcs(snapshot) {
   }
 }
 
-export function publishGalleryState(gallery) {
-  if (!connected || offline) return
+function readChunk(key) {
   try {
-    roomSetState('gallery', gallery, true)
+    return roomGetState(key)
+  } catch {
+    return undefined
+  }
+}
+
+export function readGalleryMeta() {
+  if (!connected || offline) return null
+  try {
+    return roomGetState('gallery') || null
+  } catch {
+    return null
+  }
+}
+
+export function readSharedGallery() {
+  const meta = readGalleryMeta()
+  if (!meta) return null
+  return unpackGallery(meta, readChunk)
+}
+
+export function publishGalleryState(gallery) {
+  if (!connected || offline || !gallery) return
+  try {
+    const prev = readGalleryMeta()
+    const packed = packGallery(gallery)
+    for (const chunk of packed.chunks) {
+      try {
+        roomSetState(chunk.key, chunk.value, true)
+      } catch {
+        /* um pedaço recusado não pode impedir os outros */
+      }
+    }
+    try {
+      roomSetState('gallery', packed.meta, true)
+    } catch {
+      /* ignore */
+    }
+    for (const key of staleImageKeys(prev, packed.meta)) {
+      try {
+        roomSetState(key, '', true)
+      } catch {
+        /* ignore */
+      }
+    }
   } catch {
     /* ignore */
   }
@@ -318,7 +389,7 @@ export function subscribeGalleryState(callback) {
     const unsubscribe = onPlayerJoin((state) => {
       // Quando o estado mudar, notifica o callback
       try {
-        const gallery = roomGetState('gallery')
+        const gallery = readSharedGallery()
         if (gallery) callback(gallery)
       } catch {
         /* ignore */
@@ -327,7 +398,7 @@ export function subscribeGalleryState(callback) {
     
     // Carrega estado inicial imediatamente
     try {
-      const gallery = roomGetState('gallery')
+      const gallery = readSharedGallery()
       if (gallery) callback(gallery)
     } catch {
       /* ignore */
@@ -340,12 +411,7 @@ export function subscribeGalleryState(callback) {
 }
 
 export function getInitialGalleryState() {
-  if (!connected || offline) return null
-  try {
-    return roomGetState('gallery') || null
-  } catch {
-    return null
-  }
+  return readSharedGallery()
 }
 
 /**

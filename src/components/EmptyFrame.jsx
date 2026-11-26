@@ -1,28 +1,25 @@
-import { useState, useRef, useEffect } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useRef, useEffect } from 'react'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
-import { Html } from '@react-three/drei'
 import { publishGalleryState, isRoomHost, isMultiplayerOffline } from '../systems/multiplayer'
 import { deleteArtwork, reportArtwork, getSessionToken } from '../systems/temporaryArtworks'
 import { registerEmptyFrame } from '../systems/artworkTargets'
 import { useFrameTexture } from '../hooks/useFrameTexture'
 import { getStableAuthorId } from '../systems/publishFrame'
-import FrameBorder, { CANVAS_DEPTH, CANVAS_Z, FRAME_DEPTH } from './FrameBorder'
+import FrameBorder, { CANVAS_DEPTH, CANVAS_Z } from './FrameBorder'
+import ArtworkTitlePlate from './ArtworkTitlePlate'
 
 const FRAME_MATERIAL = new THREE.MeshStandardMaterial({
   color: '#2b2b2b',
   roughness: 0.5,
   metalness: 0.3,
 })
-const _framePos = new THREE.Vector3()
 
 /**
  * Quadro vazio para galeria comunitária.
  * Permite upload de imagem para publicação na sala.
  */
 export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameId }) {
-  const [showTitle, setShowTitle] = useState(false)
   const meshRef = useRef(null)
   const matRef = useRef(null)
 
@@ -85,25 +82,6 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
     handleInteract()
   }, [publishFrameId, frameId])
 
-  const titleNear = useRef(false)
-
-  useFrame(({ camera }) => {
-    const mesh = meshRef.current
-    if (!mesh || !artwork) {
-      if (titleNear.current) {
-        titleNear.current = false
-        setShowTitle(false)
-      }
-      return
-    }
-    mesh.getWorldPosition(_framePos)
-    const near = camera.position.distanceTo(_framePos) < 4
-    if (near !== titleNear.current) {
-      titleNear.current = near
-      setShowTitle(near)
-    }
-  })
-
   return (
     <group position={position} rotation={rotation}>
       <FrameBorder width={width} height={height} material={FRAME_MATERIAL} />
@@ -127,24 +105,15 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
         />
       </mesh>
 
-      {artwork && showTitle && (
-        <Html position={[0, -height / 2 - 0.3, FRAME_DEPTH]} center distanceFactor={10}>
-          <div
-            style={{
-              background: 'rgba(0,0,0,0.7)',
-              color: 'white',
-              padding: '8px 12px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              textAlign: 'center',
-              maxWidth: '220px',
-              backdropFilter: 'blur(4px)',
-            }}
-          >
-            <div style={{ fontWeight: 600, marginBottom: '2px' }}>{artwork.title}</div>
-            <div style={{ opacity: 0.8, fontSize: '10px', marginBottom: '6px' }}>{artwork.author}</div>
-            
-            {artwork.isTemporary && (
+      <ArtworkTitlePlate
+        meshRef={meshRef}
+        width={width}
+        height={height}
+        title={artwork?.title}
+        author={artwork?.author}
+        enabled={!!artwork}
+      >
+            {artwork?.isTemporary && (
               <div style={{ 
                 fontSize: '9px', 
                 opacity: 0.6, 
@@ -156,8 +125,8 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
               </div>
             )}
             
-            {artwork.isTemporary && (
-              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+            {artwork?.isTemporary && (
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', pointerEvents: 'auto', whiteSpace: 'normal' }}>
                 {isOwner && (
                   <button
                     onClick={async (e) => {
@@ -221,9 +190,7 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
                 )}
               </div>
             )}
-          </div>
-        </Html>
-      )}
+      </ArtworkTitlePlate>
     </group>
   )
 }

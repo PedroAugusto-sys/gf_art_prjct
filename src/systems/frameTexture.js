@@ -1,4 +1,15 @@
 import * as THREE from 'three'
+import { uploadServerUrl } from './uploadServer.js'
+
+function pageHost(host) {
+  if (typeof host === 'string') return host
+  if (typeof window !== 'undefined') return window.location.hostname || ''
+  return ''
+}
+
+function isLocalHostName(host) {
+  return host === 'localhost' || host === '127.0.0.1'
+}
 
 /** Quadro de catálogo, sem obra enviada por um visitante. */
 export function isExampleArtwork(artwork) {
@@ -23,14 +34,18 @@ export function artworkImageSources(record) {
   return list
 }
 
-export function resolveArtworkUrl(url) {
+export function resolveArtworkUrl(url, host) {
   if (!url) return ''
-  if (url.startsWith('data:') || url.startsWith('blob:') || /^https?:/i.test(url)) return url
-  // Arquivo do próprio site (o catálogo em public/). O servidor de upload
-  // só entra em caminhos que não são da aplicação.
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url
+  // Arquivo do próprio site (o catálogo em public/).
   if (url.startsWith('/assets/')) return url
-  const env = import.meta.env
-  const base = (env && env.VITE_ART_SERVER_URL) || 'http://localhost:3001'
+  const here = pageHost(host)
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(url)) {
+    return isLocalHostName(here) ? url : ''
+  }
+  if (/^https?:/i.test(url)) return url
+  const base = uploadServerUrl()
+  if (!base) return ''
   return `${base}${url.startsWith('/') ? '' : '/'}${url}`
 }
 
@@ -85,6 +100,7 @@ function paintContain(image, frameWidth, frameHeight) {
 
 export function loadFrameTexture(url, frameWidth, frameHeight) {
   const request = textureRequest(url)
+  if (!request.src) return Promise.reject(new Error('texture'))
   return new Promise((resolve, reject) => {
     const img = new Image()
     if (request.crossOrigin) img.crossOrigin = request.crossOrigin

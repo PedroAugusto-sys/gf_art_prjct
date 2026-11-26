@@ -9,6 +9,7 @@ import {
   artworkImageSources,
   containRect,
   isExampleArtwork,
+  resolveArtworkUrl,
   textureRequest,
 } from './src/systems/frameTexture.js'
 
@@ -31,6 +32,13 @@ test('o data URL vem antes da URL do servidor', () => {
   })
   assert.equal(sources[0], 'data:image/webp;base64,AAAA')
   assert.equal(sources[1], 'http://localhost:3001/uploads/a.webp')
+})
+
+test('no site publicado a imagem não pede localhost', () => {
+  assert.equal(resolveArtworkUrl('http://localhost:3001/uploads/a.webp', 'art-prj.netlify.app'), '')
+  assert.equal(resolveArtworkUrl('/uploads/a.webp', 'art-prj.netlify.app'), '')
+  assert.equal(resolveArtworkUrl('/assets/artworks/obra-01.jpg', 'art-prj.netlify.app'), '/assets/artworks/obra-01.jpg')
+  assert.equal(resolveArtworkUrl('http://localhost:3001/uploads/a.webp', 'localhost'), 'http://localhost:3001/uploads/a.webp')
 })
 
 test('data URL não pede CORS', () => {
