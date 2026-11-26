@@ -247,23 +247,33 @@ export default function VisitorModel({
       {(name || speech) && (
         <Html
           position={[0, 2.05, 0]}
-          center
           distanceFactor={10}
           style={{ pointerEvents: 'none', userSelect: 'none' }}
           zIndexRange={[10, 0]}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          {/* drei sobrescreve o transform do Html (scale do distanceFactor,
+              origem no canto). O miolo recentraliza e o balão tem largura
+              própria: quebra só entre palavras, nunca uma por linha. */}
+          <div style={{ transform: 'translate(-50%, -50%)', pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 'max-content' }}>
             {speech && (
               <div
                 style={{
+                  display: 'inline-block',
+                  boxSizing: 'border-box',
+                  width: 'max-content',
+                  minWidth: 180,
+                  maxWidth: 360,
                   background: 'rgba(255,255,255,0.95)',
                   color: '#1a1a1a',
                   fontSize: 12,
                   fontWeight: 500,
                   padding: '6px 10px',
                   borderRadius: 10,
-                  maxWidth: 160,
                   textAlign: 'center',
+                  whiteSpace: 'normal',
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'normal',
                   boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                   lineHeight: 1.3,
                 }}
@@ -290,6 +300,7 @@ export default function VisitorModel({
                 {name}
               </div>
             )}
+          </div>
           </div>
         </Html>
       )}
