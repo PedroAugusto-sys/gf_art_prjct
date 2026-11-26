@@ -7,7 +7,7 @@ import { useFrame } from '@react-three/fiber'
 import { usePlayersList, myPlayer } from 'playroomkit'
 import VisitorModel, { BlobShadow } from './VisitorModel'
 import { DEFAULT_APPEARANCE } from '../systems/appearance'
-import { isMultiplayerConnected, isMultiplayerOffline } from '../systems/multiplayer'
+import { isMultiplayerConnected, isMultiplayerOffline, remoteDisplayName } from '../systems/multiplayer'
 import artworksData from '../data/artworks.json'
 
 const artById = Object.fromEntries((artworksData.artworks || []).map((a) => [a.id, a]))
@@ -37,7 +37,7 @@ function RemotePlayer({ player }) {
       motion.current.viewing = !!player.getState('viewingArtId')
 
       if (poll.current % 30 === 0) {
-        const name = player.getState('name') || player.getProfile()?.name || 'Visitante'
+        const name = remoteDisplayName(player)
         const appearance = player.getState('appearance') || DEFAULT_APPEARANCE
         const outfit = player.getState('outfit') || 'shirt'
         const scale = player.getState('scale') || [1, 1, 1]

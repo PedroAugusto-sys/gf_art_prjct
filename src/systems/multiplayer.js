@@ -191,6 +191,13 @@ export async function connectMultiplayer(identity, roomCode) {
     roomCode: code,
     maxPlayersPerRoom: MAX_PLAYERS,
   }
+  // O lobby gera um nome aleatório (President48) e grava no perfil.
+  // O apelido digitado entra no perfil já na entrada, senão os outros
+  // jogadores só enxergam esse nome automático.
+  const typedName = String(identity?.name || '').trim()
+  if (typedName) {
+    opts.profile = { name: typedName }
+  }
   const gameId = playroomGameId()
   if (gameId) {
     opts.gameId = gameId
@@ -290,12 +297,37 @@ Documentação: ${PLAYROOM_DOCS_URL}`,
   }
 }
 
+/** Apelido que os outros veem. O digitado vence; o do Playroom só entra se estiver vazio. */
+export function remoteDisplayName(player) {
+  try {
+    const nick = String(player.getState('nick') || '').trim()
+    if (nick) return nick
+    const legacy = String(player.getState('name') || '').trim()
+    if (legacy) return legacy
+    const profile = String(player.getProfile()?.name || '').trim()
+    return profile || 'Visitante'
+  } catch {
+    return 'Visitante'
+  }
+}
+
 export function publishIdentity(identity) {
   if (offline) return
   if (!sessionBooted && !connected) return
   try {
     const me = myPlayer()
-    me.setState('name', identity.name, true)
+    const name = String(identity?.name || '').trim()
+    if (name) {
+      me.setState('nick', name, true)
+      me.setState('name', name, true)
+      try {
+        const current = me.getState('profile')
+        const base = current && typeof current === 'object' ? current : {}
+        me.setState('profile', { ...base, name }, true)
+      } catch {
+        // O apelido em nick continua valendo para quem lê o estado.
+      }
+    }
     me.setState('appearance', identity.appearance, true)
     me.setState('outfit', identity.outfit, true)
     me.setState('scale', identity.scale, true)

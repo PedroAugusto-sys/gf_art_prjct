@@ -5,7 +5,7 @@ import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { playerPosRef } from '../systems/proximityRefs'
-import { publishPose, isMultiplayerConnected, POSE_INTERVAL_MS } from '../systems/multiplayer'
+import { publishPose, publishIdentity, isMultiplayerConnected, POSE_INTERVAL_MS } from '../systems/multiplayer'
 import VisitorModel from './VisitorModel'
 import { getAnnexRoomBounds } from '../data/museumLayout'
 import { groundMoveAxes } from '../systems/groundMove'
@@ -62,11 +62,33 @@ export default function Player({ position = [0, 2, 8] }) {
   const { camera, gl } = useThree()
 
   const isMobile = useGameStore((s) => s.isMobile)
+  const playerName = useGameStore((s) => s.playerName)
   const playerAppearance = useGameStore((s) => s.playerAppearance)
   const playerOutfit = useGameStore((s) => s.playerOutfit)
   const playerScale = useGameStore((s) => s.playerScale)
   const metrics = avatarMetrics(playerScale)
   const facing = useRef(0)
+
+  // O Playroom pode repor o perfil automático depois do insertCoin
+  // (reconexão ou sync inicial). O apelido digitado é republicado;
+  // setState idêntico não gera tráfego.
+  useEffect(() => {
+    const name = String(playerName || '').trim()
+    if (!name) return undefined
+    const send = () => {
+      if (!isMultiplayerConnected()) return
+      const state = useGameStore.getState()
+      publishIdentity({
+        name,
+        appearance: state.playerAppearance,
+        outfit: state.playerOutfit,
+        scale: state.playerScale,
+      })
+    }
+    send()
+    const id = window.setInterval(send, 2000)
+    return () => window.clearInterval(id)
+  }, [playerName])
 
   // Estado de teclado guardado em ref (nao precisa re-renderizar)
   const keys = useRef({ forward: false, backward: false, left: false, right: false })
