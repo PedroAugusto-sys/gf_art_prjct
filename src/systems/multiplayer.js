@@ -19,8 +19,10 @@ import {
   setState as roomSetState,
   getState as roomGetState,
   onPlayerJoin,
+  getParticipants,
 } from 'playroomkit'
 import { DEFAULT_VERSION_ID, getVersionById, museumLocationHash } from '../data/versions'
+import { packGallery, unpackGallery, staleImageKeys, shouldDiscardSessionArtworks, withoutBuriedArtworks } from './galleryPayload.js'
 
 export const MAX_PLAYERS = 10
 export const POSE_INTERVAL_MS = 100
@@ -43,6 +45,33 @@ let activeRoomCode = null
 let insertCoinPossiblyPending = false
 /** Promise em voo do boot atual (evita double-call enquanto waiting). */
 let bootPromise = null
+let playroomGuardInstalled = false
+
+function playroomEmitterNoise(message, stack) {
+  const msg = String(message || '')
+  if (!msg.includes('Unhandled error')) return false
+  const frame = String(stack || '')
+  return frame.includes('WebSocket') || frame.includes('.emit') || msg.includes('undefined')
+}
+
+/** O SDK joga "Unhandled error. (undefined)" quando o socket recusa um estado. Não deixa isso encher o console. */
+function installPlayroomErrorGuard() {
+  if (playroomGuardInstalled || typeof window === 'undefined') return
+  playroomGuardInstalled = true
+  window.addEventListener('error', (event) => {
+    if (!playroomEmitterNoise(event.message, event.error?.stack)) return
+    event.preventDefault()
+  })
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason
+    const msg = reason && typeof reason === 'object' ? reason.message : reason
+    const stack = reason && typeof reason === 'object' ? reason.stack : ''
+    if (!playroomEmitterNoise(msg, stack)) return
+    event.preventDefault()
+  })
+}
+
+installPlayroomErrorGuard()
 
 export function isMultiplayerConnected() {
   return connected && !offline
@@ -163,6 +192,13 @@ export async function connectMultiplayer(identity, roomCode) {
     roomCode: code,
     maxPlayersPerRoom: MAX_PLAYERS,
   }
+  // O lobby gera um nome aleatório (President48) e grava no perfil.
+  // O apelido digitado entra no perfil já na entrada, senão os outros
+  // jogadores só enxergam esse nome automático.
+  const typedName = String(identity?.name || '').trim()
+  if (typedName) {
+    opts.profile = { name: typedName }
+  }
   const gameId = playroomGameId()
   if (gameId) {
     opts.gameId = gameId
@@ -262,12 +298,37 @@ Documentação: ${PLAYROOM_DOCS_URL}`,
   }
 }
 
+/** Apelido que os outros veem. O digitado vence; o do Playroom só entra se estiver vazio. */
+export function remoteDisplayName(player) {
+  try {
+    const nick = String(player.getState('nick') || '').trim()
+    if (nick) return nick
+    const legacy = String(player.getState('name') || '').trim()
+    if (legacy) return legacy
+    const profile = String(player.getProfile()?.name || '').trim()
+    return profile || 'Visitante'
+  } catch {
+    return 'Visitante'
+  }
+}
+
 export function publishIdentity(identity) {
   if (offline) return
   if (!sessionBooted && !connected) return
   try {
     const me = myPlayer()
-    me.setState('name', identity.name, true)
+    const name = String(identity?.name || '').trim()
+    if (name) {
+      me.setState('nick', name, true)
+      me.setState('name', name, true)
+      try {
+        const current = me.getState('profile')
+        const base = current && typeof current === 'object' ? current : {}
+        me.setState('profile', { ...base, name }, true)
+      } catch {
+        // O apelido em nick continua valendo para quem lê o estado.
+      }
+    }
     me.setState('appearance', identity.appearance, true)
     me.setState('outfit', identity.outfit, true)
     me.setState('scale', identity.scale, true)
@@ -303,10 +364,109 @@ export function publishNpcs(snapshot) {
   }
 }
 
-export function publishGalleryState(gallery) {
-  if (!connected || offline) return
+function readChunk(key) {
   try {
-    roomSetState('gallery', gallery, true)
+    return roomGetState(key)
+  } catch {
+    return undefined
+  }
+}
+
+export function readGalleryMeta() {
+  if (!connected || offline) return null
+  try {
+    return roomGetState('gallery') || null
+  } catch {
+    return null
+  }
+}
+
+export function readSharedGallery() {
+  const meta = readGalleryMeta()
+  if (!meta) return null
+  return unpackGallery(meta, readChunk)
+}
+
+const buriedArtworkIds = new Set()
+let staleSessionDecision = null
+let staleSessionSettled = false
+
+/** Outros jogadores já na sala. Lista vazia ou erro não conta como sala vazia. */
+export function otherPlayersPresent() {
+  try {
+    const all = getParticipants() || {}
+    const ids = Object.keys(all)
+    if (!ids.length) return 1
+    let mine = null
+    try {
+      mine = myPlayer()?.id
+    } catch {
+      mine = null
+    }
+    return ids.filter((id) => id && id !== mine).length
+  } catch {
+    return 1
+  }
+}
+
+export function withoutStaleArtworks(artworks) {
+  return withoutBuriedArtworks(artworks, buriedArtworkIds)
+}
+
+/**
+ * O Playroom guarda o estado da sala com código fixo mesmo depois que
+ * todo mundo saiu. Quem entra sozinho apaga as obras da sessão anterior.
+ * Quem entra com gente na sala não mexe. A decisão vale uma vez por carga;
+ * um retorno ao menu não apaga o que a pessoa publicou nesta visita.
+ */
+export function discardStaleSessionArtworksIfAlone() {
+  if (staleSessionSettled) return Promise.resolve(false)
+  if (!staleSessionDecision) {
+    staleSessionDecision = (async () => {
+      if (!connected || offline || !isRoomHost()) return false
+      if (!shouldDiscardSessionArtworks({ isHost: true, others: otherPlayersPresent() })) return false
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      if (!connected || offline || !isRoomHost()) return false
+      if (!shouldDiscardSessionArtworks({ isHost: true, others: otherPlayersPresent() })) return false
+      const meta = readGalleryMeta()
+      for (const art of meta?.artworks || []) {
+        if (art?.id) buriedArtworkIds.add(art.id)
+      }
+      const annexCount = typeof meta?.annexCount === 'number' ? meta.annexCount : 0
+      publishGalleryState({ annexCount, artworks: [] })
+      return true
+    })()
+    staleSessionDecision.finally(() => {
+      staleSessionSettled = true
+    })
+  }
+  return staleSessionDecision
+}
+
+export function publishGalleryState(gallery) {
+  if (!connected || offline || !gallery) return
+  try {
+    const prev = readGalleryMeta()
+    const packed = packGallery(gallery)
+    for (const chunk of packed.chunks) {
+      try {
+        roomSetState(chunk.key, chunk.value, true)
+      } catch {
+        /* um pedaço recusado não pode impedir os outros */
+      }
+    }
+    try {
+      roomSetState('gallery', packed.meta, true)
+    } catch {
+      /* ignore */
+    }
+    for (const key of staleImageKeys(prev, packed.meta)) {
+      try {
+        roomSetState(key, '', true)
+      } catch {
+        /* ignore */
+      }
+    }
   } catch {
     /* ignore */
   }
@@ -318,7 +478,7 @@ export function subscribeGalleryState(callback) {
     const unsubscribe = onPlayerJoin((state) => {
       // Quando o estado mudar, notifica o callback
       try {
-        const gallery = roomGetState('gallery')
+        const gallery = readSharedGallery()
         if (gallery) callback(gallery)
       } catch {
         /* ignore */
@@ -327,7 +487,7 @@ export function subscribeGalleryState(callback) {
     
     // Carrega estado inicial imediatamente
     try {
-      const gallery = roomGetState('gallery')
+      const gallery = readSharedGallery()
       if (gallery) callback(gallery)
     } catch {
       /* ignore */
@@ -340,12 +500,7 @@ export function subscribeGalleryState(callback) {
 }
 
 export function getInitialGalleryState() {
-  if (!connected || offline) return null
-  try {
-    return roomGetState('gallery') || null
-  } catch {
-    return null
-  }
+  return readSharedGallery()
 }
 
 /**

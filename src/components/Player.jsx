@@ -5,21 +5,20 @@ import { PointerLockControls } from '@react-three/drei'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { playerPosRef } from '../systems/proximityRefs'
-import { publishPose, isMultiplayerConnected, POSE_INTERVAL_MS } from '../systems/multiplayer'
+import { publishPose, publishIdentity, isMultiplayerConnected, POSE_INTERVAL_MS } from '../systems/multiplayer'
 import VisitorModel from './VisitorModel'
 import { getAnnexRoomBounds } from '../data/museumLayout'
 import { groundMoveAxes } from '../systems/groundMove'
+import { avatarMetrics, firstPersonEyeY } from '../systems/avatarCamera'
 
 // ---------- Constantes de locomocao ----------
 const WALK_SPEED = 5 // metros/segundo
-const EYE_HEIGHT = 1.7 // altura dos olhos acima do chao (capsule center em y=0.6 + 1.1 offset)
 const LOOK_SENSITIVITY = 0.0025 // sensibilidade do arraste (mobile)
 const PITCH_LIMIT = Math.PI / 2 - 0.1 // trava o olhar para cima/baixo
 
 // O modelo aponta para +Z. A câmera olha para -Z local, então o corpo
-// fica virado PI à frente do yaw da câmera e recuado para não entrar no near plane.
+// fica virado PI à frente do yaw da câmera.
 const BODY_YAW_OFFSET = Math.PI
-const BODY_BACK = 0.05
 
 // ---------- Limites do mundo (fora daqui e vazio infinito) ----------
 // A sala tem 28 x 38; acrescentamos margem para o jardim/estacionamento externos.
@@ -31,7 +30,7 @@ const WORLD_BOUNDS = {
   minZ: Math.min(-30, getAnnexRoomBounds(1).minZ - 4),
   maxZ: 60,
 }
-const SPAWN_POS = { x: 0, y: 2, z: 12 } // posicao inicial padrao
+const SPAWN_POS = { x: 0, y: 2, z: 8 } // entre os bancos, fora do tampo
 
 // Vetores reutilizados (evita alocar objetos a cada frame -> melhor GC/performance)
 const frontVector = new THREE.Vector3()
@@ -54,7 +53,7 @@ const camEuler = new THREE.Euler()
  * - Desktop: <PointerLockControls> controla a camera diretamente com o mouse.
  * - Mobile: aplicamos yaw/pitch manualmente a partir do arraste do dedo (store.look).
  */
-export default function Player({ position = [0, 2, 12] }) {
+export default function Player({ position = [0, 2, 8] }) {
   const bodyRef = useRef(null)
   const controlsRef = useRef(null)
   const visitorMotionRef = useRef({ walking: false, viewing: false })
@@ -63,9 +62,33 @@ export default function Player({ position = [0, 2, 12] }) {
   const { camera, gl } = useThree()
 
   const isMobile = useGameStore((s) => s.isMobile)
+  const playerName = useGameStore((s) => s.playerName)
   const playerAppearance = useGameStore((s) => s.playerAppearance)
   const playerOutfit = useGameStore((s) => s.playerOutfit)
   const playerScale = useGameStore((s) => s.playerScale)
+  const metrics = avatarMetrics(playerScale)
+  const facing = useRef(0)
+
+  // O Playroom pode repor o perfil automático depois do insertCoin
+  // (reconexão ou sync inicial). O apelido digitado é republicado;
+  // setState idêntico não gera tráfego.
+  useEffect(() => {
+    const name = String(playerName || '').trim()
+    if (!name) return undefined
+    const send = () => {
+      if (!isMultiplayerConnected()) return
+      const state = useGameStore.getState()
+      publishIdentity({
+        name,
+        appearance: state.playerAppearance,
+        outfit: state.playerOutfit,
+        scale: state.playerScale,
+      })
+    }
+    send()
+    const id = window.setInterval(send, 2000)
+    return () => window.clearInterval(id)
+  }, [playerName])
 
   // Estado de teclado guardado em ref (nao precisa re-renderizar)
   const keys = useRef({ forward: false, backward: false, left: false, right: false })
@@ -74,7 +97,8 @@ export default function Player({ position = [0, 2, 12] }) {
   const resetPosition = useCallback(() => {
     const body = bodyRef.current
     if (!body) return
-    body.setTranslation({ x: SPAWN_POS.x, y: SPAWN_POS.y, z: SPAWN_POS.z }, true)
+    const stand = avatarMetrics(useGameStore.getState().playerScale).capsuleCenter
+    body.setTranslation({ x: SPAWN_POS.x, y: stand, z: SPAWN_POS.z }, true)
     body.setLinvel({ x: 0, y: 0, z: 0 }, true)
     body.setAngvel({ x: 0, y: 0, z: 0 }, true)
   }, [])
@@ -210,10 +234,11 @@ export default function Player({ position = [0, 2, 12] }) {
     playerPosRef.current[1] = t.y
     playerPosRef.current[2] = t.z
 
-    camera.position.set(t.x, t.y + EYE_HEIGHT, t.z)
+    const scale = useGameStore.getState().playerScale
 
-    // 2) Look. No desktop o PointerLockControls gira a câmera.
-    let lookYaw = yaw.current
+    // A câmera fica nos olhos. Alt, Esc e o modal de publicar soltam o
+    // mouse, mas não mudam a posição nem o yaw que já estava salvo.
+    let lookYaw = facing.current
     let lookPitch = pitch.current
     if (mobile) {
       const look = useGameStore.getState().consumeLook()
@@ -224,12 +249,19 @@ export default function Player({ position = [0, 2, 12] }) {
       }
       lookYaw = yaw.current
       lookPitch = pitch.current
+      facing.current = lookYaw
       camera.rotation.set(lookPitch, lookYaw, 0, 'YXZ')
-    } else {
+    } else if (isPointerLocked) {
       camEuler.setFromQuaternion(camera.quaternion, 'YXZ')
       lookYaw = camEuler.y
       lookPitch = camEuler.x
+      facing.current = lookYaw
+      pitch.current = lookPitch
+    } else {
+      camera.rotation.set(lookPitch, lookYaw, 0, 'YXZ')
     }
+
+    camera.position.set(t.x, firstPersonEyeY(t.y, scale), t.z)
 
     // O modelo olha para +Z; a câmera olha para -Z. Sem esse PI o corpo
     // fica de costas para o movimento e as pernas parecem ficar para trás.
@@ -305,23 +337,22 @@ export default function Player({ position = [0, 2, 12] }) {
   return (
     <>
       <RigidBody
+        key={`${metrics.sx.toFixed(2)}-${metrics.sy.toFixed(2)}`}
         ref={bodyRef}
         colliders={false}
-        // Corpo dinamico com rotacoes travadas: nao tomba, mas colide com o mundo.
         enabledRotations={[false, false, false]}
         mass={1}
-        position={position}
+        position={[position[0], metrics.capsuleCenter, position[2]]}
         linearDamping={0.15}
         friction={0}
         canSleep={false}
         type="dynamic"
       >
-        {/* CapsuleCollider(args=[meiaAltura, raio]) -> altura total ~ 2m */}
-        <CapsuleCollider args={[0.6, 0.4]} />
-        
+        <CapsuleCollider args={[metrics.half, metrics.radius]} />
+
         {playerAppearance && (
-          <group ref={visitorGroupRef}>
-            <group position={[0, 0, -BODY_BACK]} scale={playerScale}>
+          <group ref={visitorGroupRef} position={[0, -metrics.capsuleCenter, 0]} visible={false}>
+            <group scale={playerScale}>
               <VisitorModel
                 appearance={playerAppearance}
                 outfit={playerOutfit}

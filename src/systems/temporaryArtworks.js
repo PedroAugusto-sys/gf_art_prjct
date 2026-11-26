@@ -13,7 +13,17 @@
  * - Limpeza automática de órfãos
  */
 
-const API_BASE_URL = import.meta.env.VITE_ART_SERVER_URL || 'http://localhost:3001';
+import { uploadServerUrl } from './uploadServer.js'
+
+function apiBase() {
+  const base = uploadServerUrl()
+  if (!base) {
+    const err = new Error('no-upload-server')
+    err.code = 'no-upload-server'
+    throw err
+  }
+  return base
+}
 
 let sessionToken = null;
 let currentRoomId = null;
@@ -23,8 +33,14 @@ let heartbeatInterval = null;
  * Verifica se servidor está disponível
  */
 export async function checkServerHealth() {
+  let base = ''
   try {
-    const response = await fetch(`${API_BASE_URL}/api/health`, {
+    base = apiBase()
+  } catch (err) {
+    return { available: false, error: err.code || 'no-upload-server' }
+  }
+  try {
+    const response = await fetch(`${base}/api/health`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -52,7 +68,7 @@ export async function checkServerHealth() {
  */
 export async function joinRoom(roomId, playerName) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/join`, {
+    const response = await fetch(`${apiBase()}/api/join`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ roomId, playerName })
@@ -99,7 +115,7 @@ async function sendHeartbeat() {
   if (!sessionToken) return;
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/heartbeat`, {
+    const response = await fetch(`${apiBase()}/api/heartbeat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: sessionToken })
@@ -144,7 +160,7 @@ export async function uploadArtwork(file, frameId, title) {
     formData.append('frameId', frameId);
     formData.append('title', title || 'Sem título');
 
-    const response = await fetch(`${API_BASE_URL}/api/upload`, {
+    const response = await fetch(`${apiBase()}/api/upload`, {
       method: 'POST',
       body: formData
     });
@@ -173,7 +189,7 @@ export async function deleteArtwork(artworkId) {
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/artwork/${artworkId}`, {
+    const response = await fetch(`${apiBase()}/api/artwork/${artworkId}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: sessionToken })
@@ -193,39 +209,11 @@ export async function deleteArtwork(artworkId) {
 }
 
 /**
- * Reporta obra como inapropriada
- */
-export async function reportArtwork(artworkId) {
-  if (!sessionToken) {
-    throw new Error('Não conectado à sala.');
-  }
-
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/report/${artworkId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: sessionToken })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Erro ao reportar obra');
-    }
-
-    console.log(`[TempArtworks] Reported artwork ${artworkId}`);
-    return true;
-  } catch (err) {
-    console.error('[TempArtworks] Report error:', err);
-    throw err;
-  }
-}
-
-/**
  * Obtém estado atual da sala
  */
 export async function getRoomState(roomId) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/room/${roomId}`, {
+    const response = await fetch(`${apiBase()}/api/room/${roomId}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     });

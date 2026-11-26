@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { useGameStore } from '../store'
 import Vegetation from './Vegetation'
 import AnnexRoom from './AnnexRoom'
+import { AnnexTrees } from './AnnexDecor'
 import { createWallTexture, createWoodTexture } from '../systems/sceneTextures'
 import {
   ROOM,
@@ -87,7 +88,7 @@ export default function MuseumEnvironment() {
   const potGeo = useMemo(() => new THREE.CylinderGeometry(0.3, 0.22, 0.5, 10), [])
   const potPlantGeo = useMemo(() => new THREE.IcosahedronGeometry(0.34, 1), [])
 
-  const shadowMapSize = isMobile ? 1024 : 2048
+  const shadowMapSize = 1024
 
   return (
     <group>
@@ -123,7 +124,7 @@ export default function MuseumEnvironment() {
         trunks={OUTDOOR_VEGETATION.trunks}
         canopy={OUTDOOR_VEGETATION.canopy}
         shrubs={OUTDOOR_VEGETATION.shrubs}
-        castShadow={!isMobile}
+        castShadow={false}
       />
 
       {/* ============ ESTRUTURA + COLISOES ============ */}
@@ -307,7 +308,6 @@ export default function MuseumEnvironment() {
         material={materials.pillar}
         limit={64}
         frustumCulled={false}
-        castShadow
         receiveShadow
       >
         {PILLAR_POSITIONS.map(([x, z], i) => (
@@ -332,7 +332,7 @@ export default function MuseumEnvironment() {
       {/* ============ CANTEIROS AJARDINADOS ============ */}
       {GARDEN_BEDS.map((bed) => (
         <group key={bed.id} position={[bed.pos[0], 0, bed.pos[1]]}>
-          <mesh material={materials.bedRim} position={[0, BED_HEIGHT / 2, 0]} castShadow receiveShadow>
+          <mesh material={materials.bedRim} position={[0, BED_HEIGHT / 2, 0]} receiveShadow>
             <boxGeometry args={[bed.size[0], BED_HEIGHT, bed.size[1]]} />
           </mesh>
           <mesh material={materials.grass} position={[0, BED_HEIGHT + 0.02, 0]} receiveShadow>
@@ -342,12 +342,12 @@ export default function MuseumEnvironment() {
       ))}
 
       {/* ============ VASOS AO LADO DOS BANCOS ============ */}
-      <Instances geometry={potGeo} material={materials.bedRim} limit={32} frustumCulled={false} castShadow>
+      <Instances geometry={potGeo} material={materials.bedRim} limit={32} frustumCulled={false}>
         {POTS.map((pot) => (
           <Instance key={pot.id} position={[pot.pos[0], 0.25, pot.pos[1]]} />
         ))}
       </Instances>
-      <Instances geometry={potPlantGeo} material={materials.grass} limit={32} frustumCulled={false} castShadow>
+      <Instances geometry={potPlantGeo} material={materials.grass} limit={32} frustumCulled={false}>
         {POTS.map((pot) => (
           <Instance key={`${pot.id}-plant`} position={[pot.pos[0], 0.62, pot.pos[1]]} />
         ))}
@@ -359,6 +359,7 @@ export default function MuseumEnvironment() {
         canopy={INDOOR_VEGETATION.canopy}
         shrubs={INDOOR_VEGETATION.shrubs}
         useTextures={!isLegacy}
+        castShadow={false}
       />
 
       {/* Salas anexas já montadas. Expandir só liga a visibilidade. */}
@@ -372,6 +373,7 @@ export default function MuseumEnvironment() {
             />
           </group>
         ))}
+      {hasCommunityGallery && <AnnexTrees annexCount={annexCount} />}
     </group>
   )
 }

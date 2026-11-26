@@ -1,8 +1,28 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
+import { onPlayerJoin } from 'playroomkit'
 import { useGameStore } from '../store'
-import { getInitialGalleryState, isMultiplayerConnected } from '../systems/multiplayer'
-import { getState as roomGetState } from 'playroomkit'
+import {
+  discardStaleSessionArtworksIfAlone,
+  getInitialGalleryState,
+  isMultiplayerConnected,
+  isRoomHost,
+  publishGalleryState,
+  readGalleryMeta,
+  withoutStaleArtworks,
+} from '../systems/multiplayer'
+import { galleryHasInlineImages } from '../systems/galleryPayload'
 import { mergeAnnexCount } from '../systems/galleryExpansion'
+import { scrubLocalArtworkCache } from '../systems/publishFrame'
+
+function withLocalImages(local, remote) {
+  return remote.map((art) => {
+    if (art?.dataUrl) return art
+    if (!art?.parts) return art
+    const mine = (local || []).find((item) => item?.id === art?.id)
+    if (mine?.dataUrl) return { ...art, dataUrl: mine.dataUrl }
+    return art
+  })
+}
 
 const POLL_MS = 400
 
@@ -30,6 +50,7 @@ export function GallerySync() {
   const mpOffline = useGameStore((s) => s.mpOffline)
   const setAnnexCount = useGameStore((s) => s.setAnnexCount)
   const setCommunityArtworks = useGameStore((s) => s.setCommunityArtworks)
+  const repacked = useRef(false)
 
   useEffect(() => {
     if (!mpReady || mpOffline || !isMultiplayerConnected()) return
@@ -43,24 +64,85 @@ export function GallerySync() {
         const merged = mergeAnnexCount(state.annexCount, gallery.annexCount)
         if (merged !== state.annexCount) setAnnexCount(merged)
       }
-      if (Array.isArray(gallery.artworks) && !sameArtworks(state.communityArtworks, gallery.artworks)) {
-        setCommunityArtworks(gallery.artworks)
+      if (Array.isArray(gallery.artworks)) {
+        const visible = withoutStaleArtworks(gallery.artworks)
+        const mergedArt = withLocalImages(state.communityArtworks, visible)
+        if (!sameArtworks(state.communityArtworks, mergedArt)) setCommunityArtworks(mergedArt)
       }
     }
 
-    apply(getInitialGalleryState())
+    const publishHeld = () => {
+      const state = useGameStore.getState()
+      const artworks = withoutStaleArtworks(state.communityArtworks)
+      const held = artworks.some((art) => typeof art?.dataUrl === 'string' && art.dataUrl.startsWith('data:'))
+      if (!held) return
+      publishGalleryState({
+        annexCount: state.annexCount,
+        artworks,
+      })
+    }
 
-    const id = setInterval(() => {
-      try {
-        apply(roomGetState('gallery'))
-      } catch {
-        // Modo offline ou estado ainda indisponível.
+    let intervalId = 0
+    let unsubscribe = () => {}
+    let emptied = false
+    let discardMark = 0
+
+    const begin = async () => {
+      scrubLocalArtworkCache()
+      const discarded = await discardStaleSessionArtworksIfAlone()
+      if (stopped) return
+      if (discarded) {
+        emptied = true
+        discardMark = Date.now()
+        setCommunityArtworks([])
+      } else {
+        apply(getInitialGalleryState())
       }
-    }, POLL_MS)
+
+      const raw = readGalleryMeta()
+      if (!discarded && !repacked.current && galleryHasInlineImages(raw)) {
+        repacked.current = true
+        publishHeld()
+      }
+
+      intervalId = setInterval(() => {
+        try {
+          if (emptied && Date.now() - discardMark < 4000) {
+            const state = useGameStore.getState()
+            const publishedAfter = (state.communityArtworks || []).some((art) => art?.timestamp > discardMark)
+            if (!publishedAfter) {
+              publishGalleryState({ annexCount: state.annexCount, artworks: [] })
+              if (state.communityArtworks.length) setCommunityArtworks([])
+              return
+            }
+          }
+          apply(getInitialGalleryState())
+        } catch {
+          // Modo offline ou estado ainda indisponível.
+        }
+      }, POLL_MS)
+
+      try {
+        const joined = onPlayerJoin(() => {
+          if (stopped || !isRoomHost()) return
+          publishHeld()
+        })
+        if (typeof joined === 'function') unsubscribe = joined
+      } catch {
+        /* a sala segue pelo estado, sem o aviso de entrada */
+      }
+    }
+
+    begin()
 
     return () => {
       stopped = true
-      clearInterval(id)
+      clearInterval(intervalId)
+      try {
+        unsubscribe()
+      } catch {
+        /* ignore */
+      }
     }
   }, [mpReady, mpOffline, setAnnexCount, setCommunityArtworks])
 

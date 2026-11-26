@@ -1,15 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
+import { useEffect, useMemo, useRef } from 'react'
+import ArtworkTitlePlate from './ArtworkTitlePlate'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { registerArtwork } from '../systems/artworkTargets'
 import { isExampleArtwork } from '../systems/frameTexture'
 import { useFrameTexture } from '../hooks/useFrameTexture'
-import PublishForm from './PublishForm'
-
-const FRAME_DEPTH = 0.08
-const FRAME_BORDER = 0.12
+import FrameBorder, { CANVAS_DEPTH, CANVAS_Z, FRAME_DEPTH } from './FrameBorder'
 
 /**
  * Obra na parede. O catálogo de exemplo aceita publicação: sem obra de
@@ -27,8 +23,6 @@ export default function ArtworkFrame({ artwork }) {
   const published = communityArtworks.find((art) => art.frameId === id) || null
   const example = isExampleArtwork(artwork) && !published
 
-  const [hovered, setHovered] = useState(false)
-  const [showUploadUI, setShowUploadUI] = useState(false)
   const canvasMatRef = useRef(null)
   const meshRef = useRef(null)
   const texture = useFrameTexture(published || artwork, width, height, canvasMatRef)
@@ -55,38 +49,13 @@ export default function ArtworkFrame({ artwork }) {
     if (!example || publishFrameId !== id) return
     useGameStore.getState().clearPublishRequest()
     useGameStore.getState().unlockPointer()
-    useGameStore.getState().setFrameComposerOpen(true)
-    setShowUploadUI(true)
-  }, [publishFrameId, id, example])
+    useGameStore.getState().beginPublish({ frameId: id, existing: published })
+  }, [publishFrameId, id, example, published])
 
   const frameMaterial = useMemo(
     () => new THREE.MeshStandardMaterial({ color: '#2b2b2b', roughness: 0.5, metalness: 0.3 }),
     []
   )
-
-  useFrame(() => {
-    const mat = canvasMatRef.current
-    if (!mat) return
-    const target = hovered ? 0.25 : 0
-    mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity ?? 0, target, 0.15)
-  })
-
-  const closeUpload = () => {
-    setShowUploadUI(false)
-    useGameStore.getState().setFrameComposerOpen(false)
-    if (!useGameStore.getState().isMobile) {
-      setTimeout(() => useGameStore.getState().lockPointer(), 100)
-    }
-  }
-
-  const handleOver = (e) => {
-    e.stopPropagation()
-    setHovered(true)
-  }
-  const handleOut = (e) => {
-    e.stopPropagation()
-    setHovered(false)
-  }
 
   return (
     <group position={position} rotation={rotation}>
@@ -96,20 +65,17 @@ export default function ArtworkFrame({ artwork }) {
         penumbra={0.6}
         intensity={12}
         distance={8}
-        castShadow
+        castShadow={false}
         target-position={[0, 0, 0]}
         color="#fff6e8"
       />
 
-      <mesh material={frameMaterial} castShadow>
-        <boxGeometry args={[width + FRAME_BORDER * 2, height + FRAME_BORDER * 2, FRAME_DEPTH]} />
-      </mesh>
+      <FrameBorder width={width} height={height} material={frameMaterial} />
 
       <mesh
         ref={meshRef}
-        position={[0, 0, FRAME_DEPTH / 2 + 0.001]}
-        onPointerOver={handleOver}
-        onPointerOut={handleOut}
+        position={[0, 0, CANVAS_Z]}
+        receiveShadow={false}
         onClick={(e) => e.stopPropagation()}
         userData={{
           artworkId: id,
@@ -125,11 +91,12 @@ export default function ArtworkFrame({ artwork }) {
           ref={canvasMatRef}
           map={texture || null}
           color={texture ? '#ffffff' : '#9a9a9a'}
-          emissive="#ffffff"
+          emissive="#000000"
           emissiveIntensity={0}
           roughness={0.6}
           metalness={0}
           toneMapped
+          {...CANVAS_DEPTH}
         />
       </mesh>
 
@@ -139,13 +106,15 @@ export default function ArtworkFrame({ artwork }) {
           <meshBasicMaterial color="#1f1f1f" />
         </mesh>
       )}
+      <ArtworkTitlePlate
+        meshRef={meshRef}
+        width={width}
+        height={height}
+        title={published?.title || title}
+        author={published?.author || artwork.artist}
+      />
       <group name={`artwork-${title}`} />
 
-      {showUploadUI && (
-        <Html center distanceFactor={5} style={{ pointerEvents: 'auto' }}>
-          <PublishForm frameId={id} existing={published} onClose={closeUpload} />
-        </Html>
-      )}
     </group>
   )
 }

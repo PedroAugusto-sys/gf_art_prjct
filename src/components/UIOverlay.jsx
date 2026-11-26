@@ -22,6 +22,7 @@ export default function UIOverlay() {
   const focusedEmptyFrameId = useGameStore((s) => s.focusedEmptyFrameId)
   const focusedExampleArtwork = useGameStore((s) => s.focusedExampleArtwork)
   const frameComposerOpen = useGameStore((s) => s.frameComposerOpen)
+  const publishDraft = useGameStore((s) => s.publishDraft)
   const isPointerLocked = useGameStore((s) => s.isPointerLocked)
   const beginPlaying = useGameStore((s) => s.beginPlaying)
   const closeArtwork = useGameStore((s) => s.closeArtwork)
@@ -91,10 +92,19 @@ export default function UIOverlay() {
   // Com pointer lock o browser já destrava; aqui só evitamos o menu
   // e fechamos modal/obra se estiverem abertos.
   useEffect(() => {
-    if (!isStarted || isMobile) return
+    if (!isStarted) return
     const onKey = (e) => {
-      if (e.code !== 'Escape' && e.key !== 'Escape') return
       const state = useGameStore.getState()
+      const typing = document.activeElement
+      const typingTag = typing?.tagName
+      const inField = typingTag === 'INPUT' || typingTag === 'TEXTAREA' || typingTag === 'SELECT' || typing?.isContentEditable
+      if (state.selectedArtwork && (e.key === 'e' || e.key === 'E') && !inField) {
+        e.preventDefault()
+        closeArtwork()
+        return
+      }
+      if (e.code !== 'Escape' && e.key !== 'Escape') return
+      if (isMobile && !state.selectedArtwork) return
       if (state.selectedArtwork) {
         e.preventDefault()
         closeArtwork()
@@ -193,7 +203,7 @@ export default function UIOverlay() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-10">
+    <div className={`pointer-events-none fixed inset-0 ${selectedArtwork ? 'z-[2000]' : 'z-10'}`}>
       <button
         id="pointer-lock-target"
         type="button"
@@ -384,105 +394,111 @@ export default function UIOverlay() {
       {/* ============ MODAL DA OBRA ============ */}
       <AnimatePresence>
         {selectedArtwork && (
-          <>
-            {/* Fundo escurecido */}
-            <motion.div
-              key="backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+          <motion.div
+            key="viewer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pointer-events-auto absolute inset-0"
+          >
+            <div
+              className="absolute inset-0 bg-black/75"
               onClick={handleCloseArtwork}
               onPointerUp={(e) => {
-                // Mobile: o mesmo toque que abriu pode chegar aqui como pointerup
                 if (performance.now() - artworkOpenedAt.current < 400) {
                   e.preventDefault()
                   e.stopPropagation()
                 }
               }}
-              className="pointer-events-auto absolute inset-0 bg-black/50"
             />
-
-            {/* Painel deslizante (direita no desktop, sobe no mobile) */}
-            <motion.aside
-              key="panel"
-              initial={{ x: '100%', opacity: 0.6 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: '100%', opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 30 }}
-              className="pointer-events-auto absolute right-0 top-0 flex h-full w-full max-w-md flex-col overflow-y-auto bg-neutral-900/95 p-8 shadow-2xl backdrop-blur-md"
+            <div
+              className="absolute inset-0 overflow-y-auto px-4 py-6 sm:px-8 sm:py-10"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) handleCloseArtwork()
+              }}
             >
-              <button
-                onClick={closeArtwork}
-                aria-label="Fechar"
-                className="mb-6 self-end rounded-full border border-white/30 px-4 py-1 text-sm text-white/80 transition hover:bg-white hover:text-black"
+              <div
+                className="mx-auto flex min-h-full w-full max-w-5xl flex-col items-center justify-center gap-4"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) handleCloseArtwork()
+                }}
               >
-                Fechar
-              </button>
-
-              {/* Imagem da obra (mesmo arquivo usado na textura 3D) */}
-              {editingArtwork ? (
-                <PublishForm
-                  frameId={selectedArtwork.frameId}
-                  existing={{
-                    id: selectedArtwork.id,
-                    frameId: selectedArtwork.frameId,
-                    title: selectedArtwork.title,
-                    description: selectedArtwork.description,
-                    authorId: selectedArtwork.authorId,
-                    author: selectedArtwork.artist,
-                    dataUrl: String(selectedArtwork.imagePath || '').startsWith('data:')
-                      ? selectedArtwork.imagePath
-                      : null,
-                    url: String(selectedArtwork.imagePath || '').startsWith('data:')
-                      ? null
-                      : selectedArtwork.imagePath || null,
-                  }}
-                  onClose={() => setEditingArtwork(false)}
-                  onSaved={(artwork) => {
-                    useGameStore.getState().openArtwork({
-                      ...selectedArtwork,
-                      title: artwork.title,
-                      description: artwork.description,
-                      imagePath: artwork.dataUrl || artwork.url || selectedArtwork.imagePath,
-                      authorId: artwork.authorId,
-                    })
-                    setEditingArtwork(false)
-                  }}
-                />
-              ) : (
-                <>
-              <div className="mb-6 flex h-56 w-full items-center justify-center overflow-hidden rounded-lg bg-neutral-800">
-                <img
-                  src={selectedArtwork.imagePath}
-                  alt={selectedArtwork.title}
-                  className="max-h-full max-w-full object-contain"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
+                {editingArtwork ? (
+                  <PublishForm
+                    frameId={selectedArtwork.frameId}
+                    existing={{
+                      id: selectedArtwork.id,
+                      frameId: selectedArtwork.frameId,
+                      title: selectedArtwork.title,
+                      description: selectedArtwork.description,
+                      authorId: selectedArtwork.authorId,
+                      author: selectedArtwork.artist,
+                      dataUrl: String(selectedArtwork.imagePath || '').startsWith('data:')
+                        ? selectedArtwork.imagePath
+                        : null,
+                      url: String(selectedArtwork.imagePath || '').startsWith('data:')
+                        ? null
+                        : selectedArtwork.imagePath || null,
+                    }}
+                    onClose={() => setEditingArtwork(false)}
+                    onSaved={(artwork) => {
+                      useGameStore.getState().openArtwork({
+                        ...selectedArtwork,
+                        title: artwork.title,
+                        description: artwork.description,
+                        imagePath: artwork.dataUrl || artwork.url || selectedArtwork.imagePath,
+                        authorId: artwork.authorId,
+                      })
+                      setEditingArtwork(false)
+                    }}
+                  />
+                ) : (
+                  <>
+                    <img
+                      src={selectedArtwork.imagePath}
+                      alt={selectedArtwork.title}
+                      className="h-auto w-auto max-h-[48vh] max-w-full object-contain shadow-2xl sm:max-h-[62vh]"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none'
+                      }}
+                    />
+                    <div className="w-full max-w-xl rounded-2xl bg-neutral-950/95 p-5 text-left text-white shadow-2xl ring-1 ring-white/10">
+                      <h2 className="text-xl font-semibold sm:text-2xl">{selectedArtwork.title || 'Sem título'}</h2>
+                      {selectedArtwork.artist && (
+                        <p className="mt-1 text-sm text-white/60">
+                          por {selectedArtwork.artist}
+                          {selectedArtwork.year ? ` - ${selectedArtwork.year}` : ''}
+                        </p>
+                      )}
+                      {selectedArtwork.description ? (
+                        <p className="mt-4 max-h-[28vh] overflow-y-auto text-base leading-relaxed whitespace-pre-wrap text-white/85">
+                          {selectedArtwork.description}
+                        </p>
+                      ) : null}
+                      <div className="mt-5 flex flex-wrap gap-3">
+                        {canEditArtwork(selectedArtwork) && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingArtwork(true)}
+                            className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-neutral-900"
+                          >
+                            Editar obra
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={closeArtwork}
+                          className="rounded-full border border-white/30 px-4 py-2 text-sm text-white/90 transition hover:bg-white hover:text-black"
+                        >
+                          Fechar
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-
-              <h2 className="text-2xl font-semibold text-white">{selectedArtwork.title}</h2>
-              <p className="mt-1 text-sm text-white/60">
-                {selectedArtwork.artist}
-                {selectedArtwork.year ? ` - ${selectedArtwork.year}` : ''}
-              </p>
-              <p className="mt-6 text-base leading-relaxed text-white/80">
-                {selectedArtwork.description || 'Sem descrição.'}
-              </p>
-              {canEditArtwork(selectedArtwork) && (
-                <button
-                  type="button"
-                  onClick={() => setEditingArtwork(true)}
-                  className="mt-6 rounded-full bg-white px-4 py-2 text-sm font-semibold text-neutral-900"
-                >
-                  Editar obra
-                </button>
-              )}
-                </>
-              )}
-            </motion.aside>
-          </>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -537,6 +553,20 @@ export default function UIOverlay() {
               {communityArtworks.length}
             </span>
           </button>
+        </div>
+      )}
+
+      {publishDraft && (
+        <div className="pointer-events-auto fixed inset-0 z-[2200] flex items-start justify-center overflow-y-auto bg-black/75 px-4 py-8">
+          <PublishForm
+            key={`${publishDraft.frameId}-${publishDraft.existing?.id || 'nova'}`}
+            frameId={publishDraft.frameId}
+            existing={publishDraft.existing}
+            onClose={() => {
+              useGameStore.getState().endPublish()
+              if (!isMobile) setTimeout(() => lockPointer(), 100)
+            }}
+          />
         </div>
       )}
 

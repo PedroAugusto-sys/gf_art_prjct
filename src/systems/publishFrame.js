@@ -12,7 +12,8 @@ export function getStableAuthorId() {
   return authorId
 }
 
-const SYNC_BUDGET = 180000
+const SYNC_BUDGET = 150 * 1024
+const MAX_EDGE = 1024
 
 function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
@@ -34,12 +35,27 @@ function drawScaled(img, maxEdge) {
   return canvas
 }
 
+function encodeCanvas(canvas, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((webp) => {
+      if (webp) {
+        resolve({ blob: webp, type: 'image/webp', name: 'obra.webp' })
+        return
+      }
+      canvas.toBlob((jpeg) => {
+        if (jpeg) resolve({ blob: jpeg, type: 'image/jpeg', name: 'obra.jpg' })
+        else reject(new Error('Failed to create blob'))
+      }, 'image/jpeg', quality)
+    }, 'image/webp', quality)
+  })
+}
+
 /**
- * Reduz a imagem antes do envio e da textura.
- * O lado maior fica em no máximo 2048 px. Se o data URL ainda for grande
- * demais para a sala, a qualidade (e, se precisar, o tamanho) desce até caber.
+ * Reduz a imagem antes de sincronizar.
+ * O lado maior fica em no máximo 1024 px, qualidade cerca de 0,7,
+ * e o data URL fica abaixo de ~150 KB para caber na sala em pedaços.
  */
-export function resizeImageToDataUrl(file, maxSize = 2048) {
+export function resizeImageToDataUrl(file, maxSize = MAX_EDGE) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onerror = () => reject(new Error('Não foi possível ler a imagem'))
@@ -48,21 +64,20 @@ export function resizeImageToDataUrl(file, maxSize = 2048) {
       img.onerror = () => reject(new Error('Não foi possível ler a imagem'))
       img.onload = async () => {
         try {
-          let edge = maxSize
-          let quality = 0.82
+          let edge = Math.min(maxSize, MAX_EDGE)
+          let quality = 0.7
           let dataUrl = ''
-          let blob = null
-          for (let attempt = 0; attempt < 8; attempt++) {
+          let encoded = null
+          for (let attempt = 0; attempt < 10; attempt++) {
             const canvas = drawScaled(img, edge)
-            blob = await new Promise((res) => canvas.toBlob(res, 'image/webp', quality))
-            if (!blob) throw new Error('Failed to create blob')
-            dataUrl = await blobToDataUrl(blob)
+            encoded = await encodeCanvas(canvas, quality)
+            dataUrl = await blobToDataUrl(encoded.blob)
             if (dataUrl.length <= SYNC_BUDGET) break
-            if (quality > 0.5) quality -= 0.12
-            else edge = Math.round(edge * 0.75)
-            if (edge < 640) break
+            if (quality > 0.4) quality = Math.round((quality - 0.1) * 10) / 10
+            else edge = Math.round(edge * 0.8)
+            if (edge < 320) break
           }
-          const resized = new File([blob], 'obra.webp', { type: 'image/webp' })
+          const resized = new File([encoded.blob], encoded.name, { type: encoded.type })
           resolve({ dataUrl, file: resized })
         } catch (err) {
           reject(err)
@@ -87,14 +102,35 @@ export function canEditArtwork(artwork) {
   }
 }
 
+function artworkRecord(artwork) {
+  if (!artwork || typeof artwork !== 'object') return null
+  const { dataUrl, url, ...rest } = artwork
+  return rest
+}
+
+/** A cópia local só lembra de quem é a obra. Sem a imagem, um reentrar não republica. */
+export function scrubLocalArtworkCache() {
+  if (typeof localStorage === 'undefined') return
+  try {
+    const backup = JSON.parse(localStorage.getItem('gf-my-artworks') || '[]')
+    if (!Array.isArray(backup)) return
+    const slim = backup.map(artworkRecord).filter(Boolean)
+    localStorage.setItem('gf-my-artworks', JSON.stringify(slim))
+  } catch {
+    // localStorage pode estar cheio ou bloqueado
+  }
+}
+
 function rememberLocally(artwork) {
   if (typeof localStorage === 'undefined') return
   try {
     const backup = JSON.parse(localStorage.getItem('gf-my-artworks') || '[]')
-    const existing = backup.findIndex((art) => art.frameId === artwork.frameId)
-    if (existing >= 0) backup[existing] = artwork
-    else backup.push(artwork)
-    localStorage.setItem('gf-my-artworks', JSON.stringify(backup))
+    const record = artworkRecord(artwork)
+    if (!record) return
+    const existing = backup.findIndex((art) => art.frameId === record.frameId)
+    if (existing >= 0) backup[existing] = record
+    else backup.push(record)
+    localStorage.setItem('gf-my-artworks', JSON.stringify(backup.map(artworkRecord).filter(Boolean)))
   } catch {
     // localStorage pode estar cheio ou bloqueado
   }
@@ -112,7 +148,7 @@ export async function publishImageOnFrame({ file, frameId, title, description, e
   let dataUrl = existing?.dataUrl || null
   let uploadFile = null
   if (hasFile) {
-    const resized = await resizeImageToDataUrl(file, 2048)
+    const resized = await resizeImageToDataUrl(file, MAX_EDGE)
     dataUrl = resized.dataUrl
     uploadFile = resized.file
   }
@@ -132,13 +168,13 @@ export async function publishImageOnFrame({ file, frameId, title, description, e
     frameId,
     dataUrl,
     url: hasFile ? uploaded?.url || null : existing?.url || null,
-    title: (title || '').trim() || existing?.title || uploaded?.title || 'Sem título',
+    title: (title || '').trim() || (existing?.title || '').trim() || (uploaded?.title || '').trim(),
     description: (description || '').trim(),
-    author: existing?.author || uploaded?.author || playerName || 'Anônimo',
+    author: (existing?.author || uploaded?.author || playerName || 'Anônimo').trim() || 'Anônimo',
     authorId,
     authorToken: sessionToken || existing?.authorToken || undefined,
     timestamp: Date.now(),
-    isTemporary: !!uploaded || !!existing?.isTemporary,
+    isTemporary: true,
   }
 
   rememberLocally(artwork)

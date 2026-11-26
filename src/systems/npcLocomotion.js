@@ -16,7 +16,16 @@ import {
   updateAgent,
 } from './crowd.js'
 import { DOORS, HALF_D } from '../data/museumLayout.js'
-import { SPEECH_DELAY_MAX, SPEECH_DELAY_MIN } from './npcDialogue.js'
+import {
+  SPEECH_CHANCE,
+  SPEECH_COOLDOWN,
+  SPEECH_DELAY_MAX,
+  SPEECH_DELAY_MIN,
+  SPEECH_DURATION,
+  canStartSpeech,
+  markSpeechStarted,
+  pickPositiveLine,
+} from './npcDialogue.js'
 
 export const WALK_SPEED = 1.2
 export const ARRIVE_RADIUS = 0.45
@@ -26,8 +35,8 @@ const STUCK_INTERVAL = 0.8
 const STUCK_MIN_PROGRESS = 0.35
 const STUCK_MAX_RETRIES = 1
 const DOOR_HALF_CLEAR = DOORS.width * 0.5 - 0.28
-const VIEW_MIN = 8
-const VIEW_MAX = 15
+const VIEW_MIN = 4.5
+const VIEW_MAX = 8
 const REST_MIN = 3
 const REST_MAX = 7
 const DOOR_LEFT_X = DOORS.centers[0]
@@ -222,7 +231,10 @@ function pushApart(state, position, dirX, dirZ, constrain) {
 export function tickWalker(state, position, dt, time, { npcId, leaving, entrySide }) {
   state.npcId = npcId
   state.entrySide = entrySide
-  const stepDt = Math.min(dt, 0.05)
+  // O frame pode vir atrasado (muitos visitantes, aba retomada). O passo
+  // curto evita atravessar a grade; o laço gasta o dt inteiro, senão o
+  // relógio anda e o corpo não, e o detector de preso troca a rota para sempre.
+  const budget = Math.min(Math.max(dt, 0), 0.25)
 
   if (!state.started) {
     state.started = true
@@ -259,7 +271,7 @@ export function tickWalker(state, position, dt, time, { npcId, leaving, entrySid
   let faceZ = null
 
   if (state.mode === 'exiting') {
-    position.z += WALK_SPEED * stepDt
+    position.z += WALK_SPEED * budget
     moving = true
     faceX = 0
     faceZ = 1
@@ -274,33 +286,43 @@ export function tickWalker(state, position, dt, time, { npcId, leaving, entrySid
   }
 
   if (state.route.length > 0) {
-    const wp = state.route[0]
-    let dx = wp.x - position.x
-    let dz = wp.z - position.z
-    let dist = Math.hypot(dx, dz)
-    const radius = wp.final ? ARRIVE_FINAL : ARRIVE_RADIUS
+    let spent = 0
+    let guard = 0
+    while (state.route.length > 0 && spent < budget - 1e-6 && guard < 6) {
+      guard += 1
+      const stepDt = Math.min(0.05, budget - spent)
+      spent += stepDt
+      const wp = state.route[0]
+      const dx = wp.x - position.x
+      const dz = wp.z - position.z
+      const dist = Math.hypot(dx, dz)
+      const radius = wp.final ? ARRIVE_FINAL : ARRIVE_RADIUS
 
-    if (constrainMove(position, state) && !wp.final && !isWalkable(wp.x, wp.z)) {
-      state.route.shift()
-    } else if (dist < radius) {
-      state.route.shift()
-      if (state.route.length === 0) {
-        if (state.mode === 'leaving') {
-          state.mode = 'exiting'
-        } else {
-          state.mode = state.look ? 'viewing' : 'resting'
-          state.until =
-            time +
-            (state.look
-              ? VIEW_MIN + Math.random() * (VIEW_MAX - VIEW_MIN)
-              : REST_MIN + Math.random() * (REST_MAX - REST_MIN))
-          if (state.mode === 'viewing') {
-            state.speechArmedAt =
-              time + SPEECH_DELAY_MIN + Math.random() * (SPEECH_DELAY_MAX - SPEECH_DELAY_MIN)
+      if (constrainMove(position, state) && !wp.final && !isWalkable(wp.x, wp.z)) {
+        state.route.shift()
+        continue
+      }
+      if (dist < radius) {
+        state.route.shift()
+        if (state.route.length === 0) {
+          if (state.mode === 'leaving') {
+            state.mode = 'exiting'
+          } else {
+            state.mode = state.look ? 'viewing' : 'resting'
+            state.until =
+              time +
+              (state.look
+                ? VIEW_MIN + Math.random() * (VIEW_MAX - VIEW_MIN)
+                : REST_MIN + Math.random() * (REST_MAX - REST_MIN))
+            if (state.mode === 'viewing') {
+              state.speechArmedAt =
+                time + SPEECH_DELAY_MIN + Math.random() * (SPEECH_DELAY_MAX - SPEECH_DELAY_MIN)
+            }
           }
         }
+        continue
       }
-    } else {
+
       const dirX = dx / dist
       const dirZ = dz / dist
       faceX = dirX
@@ -316,8 +338,13 @@ export function tickWalker(state, position, dt, time, { npcId, leaving, entrySid
       moving = moved.moved
       blocked = !moved.moved
       if (moved.moved) pushApart(state, position, dirX, dirZ, constrainMove(position, state))
+      if (!moved.moved) break
     }
   } else if (state.mode === 'viewing' || state.mode === 'resting') {
+    if (state.mode === 'viewing' && state.look) {
+      faceX = state.look[0] - position.x
+      faceZ = state.look[2] - position.z
+    }
     if (time >= state.until) {
       if (leaving) {
         state.mode = 'leaving'
@@ -350,6 +377,28 @@ export function tickWalker(state, position, dt, time, { npcId, leaving, entrySid
     state.stuckCheckAt = time + STUCK_INTERVAL
     state.stuckX = position.x
     state.stuckZ = position.z
+  }
+
+  if (
+    state.mode === 'viewing' &&
+    state.speechArmedAt > 0 &&
+    time >= state.speechArmedAt
+  ) {
+    state.speechArmedAt = 0
+    if (
+      time >= state.speechCooldownUntil &&
+      !state.speechText &&
+      canStartSpeech(time) &&
+      Math.random() < SPEECH_CHANCE
+    ) {
+      state.speechText = pickPositiveLine(state.lastArtId)
+      state.speechUntil = time + SPEECH_DURATION
+      markSpeechStarted(time)
+    }
+  }
+  if (state.speechText && time >= state.speechUntil) {
+    state.speechText = null
+    state.speechCooldownUntil = time + SPEECH_COOLDOWN
   }
 
   updateAgent(npcId, position.x, position.z)

@@ -27,7 +27,7 @@ export function TemporaryArtworkSession() {
       
       if (health.available) {
         console.log('[TempArtworkSession] Servidor disponível:', health.config)
-      } else {
+      } else if (health.error !== 'no-upload-server') {
         console.info('[TempArtworkSession] Servidor indisponível, usando sistema antigo (data URLs)')
       }
     })
