@@ -209,34 +209,6 @@ export async function deleteArtwork(artworkId) {
 }
 
 /**
- * Reporta obra como inapropriada
- */
-export async function reportArtwork(artworkId) {
-  if (!sessionToken) {
-    throw new Error('Não conectado à sala.');
-  }
-
-  try {
-    const response = await fetch(`${apiBase()}/api/report/${artworkId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: sessionToken })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Erro ao reportar obra');
-    }
-
-    console.log(`[TempArtworks] Reported artwork ${artworkId}`);
-    return true;
-  } catch (err) {
-    console.error('[TempArtworks] Report error:', err);
-    throw err;
-  }
-}
-
-/**
  * Obtém estado atual da sala
  */
 export async function getRoomState(roomId) {

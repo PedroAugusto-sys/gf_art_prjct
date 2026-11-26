@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react'
 import * as THREE from 'three'
 import { useGameStore } from '../store'
 import { publishGalleryState, isRoomHost, isMultiplayerOffline } from '../systems/multiplayer'
-import { deleteArtwork, reportArtwork, getSessionToken } from '../systems/temporaryArtworks'
+import { deleteArtwork, getSessionToken } from '../systems/temporaryArtworks'
 import { registerEmptyFrame } from '../systems/artworkTargets'
 import { useFrameTexture } from '../hooks/useFrameTexture'
 import { getStableAuthorId } from '../systems/publishFrame'
@@ -125,69 +125,39 @@ export default function EmptyFrame({ position, rotation, size = [2, 1.5], frameI
               </div>
             )}
             
-            {artwork?.isTemporary && (
+            {artwork?.isTemporary && isOwner && (
               <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', pointerEvents: 'auto', whiteSpace: 'normal' }}>
-                {isOwner && (
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      if (!confirm(`Deletar "${artwork.title}"?`)) return
-                      try {
-                        if (sessionToken) await deleteArtwork(artwork.id)
-                      } catch (err) {
-                        if (sessionToken) {
-                          alert(`Erro: ${err.message}`)
-                          return
-                        }
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation()
+                    if (!confirm(`Deletar "${artwork.title}"?`)) return
+                    try {
+                      if (sessionToken) await deleteArtwork(artwork.id)
+                    } catch (err) {
+                      if (sessionToken) {
+                        alert(`Erro: ${err.message}`)
+                        return
                       }
-                      updateCommunityArtwork(artwork.id, null)
-                      publishGalleryState({
-                        annexCount: useGameStore.getState().annexCount,
-                        artworks: useGameStore.getState().communityArtworks.filter((item) => item.id !== artwork.id),
-                      })
-                    }}
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      border: 'none',
-                      background: '#dc2626',
-                      color: 'white',
-                      fontSize: '10px',
-                      cursor: 'pointer',
-                      fontWeight: 600
-                    }}
-                  >
-                    🗑️ Deletar
-                  </button>
-                )}
-                
-                {!isOwner && (
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      if (confirm('Reportar esta obra como inapropriada?')) {
-                        try {
-                          await reportArtwork(artwork.id)
-                          alert('Obra reportada com sucesso')
-                        } catch (err) {
-                          alert(`Erro: ${err.message}`)
-                        }
-                      }
-                    }}
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      border: '1px solid rgba(255,255,255,0.3)',
-                      background: 'transparent',
-                      color: 'white',
-                      fontSize: '10px',
-                      cursor: 'pointer',
-                      fontWeight: 600
-                    }}
-                  >
-                    ⚠️ Reportar
-                  </button>
-                )}
+                    }
+                    updateCommunityArtwork(artwork.id, null)
+                    publishGalleryState({
+                      annexCount: useGameStore.getState().annexCount,
+                      artworks: useGameStore.getState().communityArtworks.filter((item) => item.id !== artwork.id),
+                    })
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    background: '#dc2626',
+                    color: 'white',
+                    fontSize: '10px',
+                    cursor: 'pointer',
+                    fontWeight: 600
+                  }}
+                >
+                  🗑️ Deletar
+                </button>
               </div>
             )}
       </ArtworkTitlePlate>
